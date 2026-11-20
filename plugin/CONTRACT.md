@@ -46,7 +46,7 @@ The setup chat (**Set up personas**) writes `start`, `prepare`, `copy` and, only
 
 A field with the wrong type is refused, and the message names the field. So is a prompt file that isn't there.
 
-Each Orca worktree is its own project, the main checkout included, and reads `persona.studio` from its own root. There's no base branch to set: the worktree's own branch is the one runs test (as committed, from origin when origin has it), fixes are built from, and PRs go into.
+Each Orca worktree is its own project, the main checkout included, and reads `persona.studio` from its own root. There's no base branch to set: the worktree's own branch is the one runs test (its last local commit; Run asks first when there are uncommitted changes), fixes are built from, and PRs go into.
 
 ## Persona files
 
