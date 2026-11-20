@@ -1,0 +1,21 @@
+# Development docs and agent workspace (kept locally only)
+/docs/superpowers
+/.superpowers
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Orca
+.orca/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.env.local

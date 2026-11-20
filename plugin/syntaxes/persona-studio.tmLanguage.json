@@ -1,0 +1,61 @@
+{
+  "name": "JSON",
+  "scopeName": "source.json.persona-studio",
+  "patterns": [{ "include": "#value" }],
+  "repository": {
+    "value": {
+      "patterns": [
+        { "include": "#object" },
+        { "include": "#array" },
+        { "include": "#string" },
+        { "include": "#number" },
+        { "include": "#constant" }
+      ]
+    },
+    "object": {
+      "name": "meta.structure.dictionary.json",
+      "begin": "\\{",
+      "beginCaptures": { "0": { "name": "punctuation.definition.dictionary.begin.json" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.dictionary.end.json" } },
+      "patterns": [
+        { "include": "#key" },
+        {
+          "name": "meta.structure.dictionary.value.json",
+          "begin": ":",
+          "beginCaptures": { "0": { "name": "punctuation.separator.dictionary.key-value.json" } },
+          "end": "(,)|(?=\\})",
+          "endCaptures": { "1": { "name": "punctuation.separator.dictionary.pair.json" } },
+          "patterns": [{ "include": "#value" }]
+        }
+      ]
+    },
+    "key": {
+      "name": "string.json support.type.property-name.json",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.support.type.property-name.begin.json" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.support.type.property-name.end.json" } },
+      "patterns": [{ "include": "#escape" }]
+    },
+    "array": {
+      "name": "meta.structure.array.json",
+      "begin": "\\[",
+      "beginCaptures": { "0": { "name": "punctuation.definition.array.begin.json" } },
+      "end": "\\]",
+      "endCaptures": { "0": { "name": "punctuation.definition.array.end.json" } },
+      "patterns": [{ "include": "#value" }, { "name": "punctuation.separator.array.json", "match": "," }]
+    },
+    "string": {
+      "name": "string.quoted.double.json",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.json" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.json" } },
+      "patterns": [{ "include": "#escape" }]
+    },
+    "escape": { "name": "constant.character.escape.json", "match": "\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4})" },
+    "number": { "name": "constant.numeric.json", "match": "-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?" },
+    "constant": { "name": "constant.language.json", "match": "\\b(?:true|false|null)\\b" }
+  }
+}

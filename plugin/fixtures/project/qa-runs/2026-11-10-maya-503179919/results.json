@@ -1,0 +1,69 @@
+{
+  "runId": "2026-11-10-maya-503179919",
+  "persona": "maya",
+  "seed": 503179919,
+  "appCommit": "b03fd0112c95f4bee1d34fff81f7da45475a3c78",
+  "clean": true,
+  "input": "touch",
+  "steps": [
+    { "name": "1. Open my photo", "measured": "open-photo", "counts": { "keys": 45, "clicks": 14 } },
+    { "name": "2. Pick the picture itself, to tune it" },
+    { "name": "3. Try every art style" }
+  ],
+  "findings": [
+    {
+      "id": "1-F1",
+      "kinds": ["a11y"],
+      "severity": "minor",
+      "title": "Choose a file can't be reached from the keyboard",
+      "step": "1. Open my photo",
+      "repro": "Start screen: press Cmd+O (nothing); press Tab repeatedly (never lands on \"Choose a file\").",
+      "expected": "Cmd+O opens a file, as in Photoshop; or at least Tab reaches \"Choose a file\" and Enter opens the chooser.",
+      "actual": "Cmd+O does nothing. \"Choose a file\" is a label around a hidden file input, so it is not in the Tab order at all (41 Tabs never reached it) and the aria tree shows it as plain text, not a button. From the keys there is no way to open a picture.",
+      "shots": ["shots/001-start-screen.png"]
+    },
+    {
+      "id": "1-F3",
+      "kinds": ["bug"],
+      "severity": "polish",
+      "title": "A quick second tap on a layer is lost",
+      "step": "2. Pick the picture itself, to tune it",
+      "repro": "Open photo.jpg on a touch tablet; tap Layer 1, then within a quarter second tap Base: Layer 1 is still picked.",
+      "expected": "Each tap on a layer row picks that row.",
+      "actual": "A tap on Base within about 300 ms of a tap on Layer 1 is lost: Layer 1 stays picked (150 ms and 250 ms gaps lost the tap; 400 ms and 600 ms picked Base). Quick taps between rows, as she flips back and forth, silently do nothing.",
+      "shots": ["shots/013-failed-1794296748707-02b-mjs.png"]
+    },
+    {
+      "id": "1-F8",
+      "kinds": ["bug"],
+      "severity": "major",
+      "title": "The help i never opens on a tablet",
+      "step": "Free time: Getting the picture in",
+      "repro": "On a touch tablet open photo.jpg, pick Base, tap the i beside Choose characters (or any i in the left column): nothing appears.",
+      "expected": "Tapping the i beside a setting shows its help, as hovering does with a mouse.",
+      "actual": "On a touch screen a tap fires mouseenter (show) and then click (toggle), so the tooltip opens and closes in the same tap: no help ever shows. The i is also a 12x12 px target, not focusable and not a button (aria shows a bare \"i\"), so neither touch nor keyboard can read any of the left column's help.",
+      "shots": ["shots/046-after-tapping-the-i.png"]
+    },
+    {
+      "id": "2-F15",
+      "kinds": ["bug"],
+      "severity": "major",
+      "title": "There is no PNG export",
+      "step": "30. Export a PNG to post",
+      "repro": "Open a photo, look for Export PNG on every tab, in the Actions menu, and on a long press of the canvas.",
+      "expected": "A PNG export of the art as it shows; Vector shapes (Saving) lists \"Exports (.ans, PNG, GIF and the rest)\".",
+      "actual": "There is no PNG export: not in the left column, not on SAUCE, not in Actions, no key. A long press on the canvas only paints. The only exports are .ans and .utf8ans (GIF only with Animate on, per the docs).",
+      "shots": ["../2026-11-10-maya-503179919-2/shots/090-30-no-png.png"]
+    }
+  ],
+  "goals": [
+    { "goal": "Open a photo from the keys in three presses or fewer.", "value": 45 },
+    {
+      "goal": "The help is readable on a tablet.",
+      "judgment": "notMet",
+      "evidence": "Tapping the help i never opens its tooltip (1-F8).",
+      "shot": "shots/046-after-tapping-the-i.png"
+    }
+  ],
+  "scores": { "keyboard": 60 }
+}

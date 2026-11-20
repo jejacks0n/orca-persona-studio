@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 2,
+  "id": "studio",
+  "name": "Persona Studio",
+  "version": "0.1.0",
+  "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      { "id": "studio", "title": "Persona Studio", "icon": "bot", "entry": "src/panel.tsx", "ui": "components" }
+    ],
+    "customEditors": [
+      { "id": "app", "title": "Persona Studio", "icon": "assets/tab-icon.png", "filenames": ["persona.studio"], "entry": "src/app.ts" }
+    ],
+    "syntaxes": [
+      { "id": "persona-studio", "title": "JSON", "scopeName": "source.json.persona-studio", "path": "syntaxes/persona-studio.tmLanguage.json", "configuration": "syntaxes/language-configuration.json", "filenames": ["persona.studio"] }
+    ],
+    "commands": [
+      { "id": "open", "title": "Persona Studio: open the tab" },
+      { "id": "needs-you", "title": "Persona Studio: what needs me" }
+    ],
+    "events": [
+      { "on": "agent.status.changed" },
+      { "on": "workspace.changed" }
+    ],
+    "settings": [
+      { "key": "agent", "title": "Agent", "description": "The agent that runs each role.", "type": "string", "default": "claude" },
+      { "key": "orcaPath", "title": "Orca path", "description": "Where the orca command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
+      { "key": "ghPath", "title": "GitHub CLI path", "description": "Where the gh command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
+      { "key": "gitPath", "title": "Git path", "description": "Where the git command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
+      { "key": "prPollMinutes", "title": "PR check interval", "description": "Minutes between checks on open pull requests.", "type": "integer", "default": 5, "minimum": 1 }
+    ]
+  },
+  "capabilities": [
+    { "kind": "storage:own" },
+    { "kind": "settings:own" },
+    { "kind": "notifications:show" },
+    { "kind": "agent:launch" },
+    { "kind": "agent:read" },
+    { "kind": "workspace:read" },
+    { "kind": "workspace:write" }
+  ]
+}
