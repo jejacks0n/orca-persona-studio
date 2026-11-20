@@ -1,10 +1,43 @@
-# Persona Studio
+<p align="center"><img src=".github/readme/faces.png" width="160" alt="Three sample personas"></p>
 
-**Version:** 0.1.0
+<h1 align="center">Persona Studio</h1>
 
-Improve your Test-Driven Development using simulated personas and highly specific user goals.
+<p align="center"><b>See your app through your users' eyes before they tell you what's broken.</b></p>
 
-An [Orca](https://orca.dev) plugin. Persona Studio uses personas, which represent a specific type of user with something to get done in your app. Each one uses the app the way that person would, and reports what bugs it encounters or friction points it ran into. You can set specific things to count, like number of keystrokes, clicks, etc. Everything they report lands in one findings list per project, where you decide what matters, and a finding you want fixed goes to an agent in an ordinary Orca worktree.
+<p align="center">Each persona is a distinct user with a real job to do. Persona Studio sends them into your app in Orca's browser and brings back the bugs, missing pieces, and rough edges that got in their way.</p>
+
+<p align="center">
+  <a href="https://github.com/jejacks0n/orca-persona-studio/actions/workflows/ci.yml"><img src="https://github.com/jejacks0n/orca-persona-studio/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  &nbsp;An <a href="https://orca.dev">Orca</a> plugin · v0.1.0 · MIT
+</p>
+
+## Why personas
+
+- Personas go beyond your test suite, exploring the paths a real person takes and catching surprises you never thought to script.
+- Test as real people, not "a user." Someone who never touches the mouse runs into very different walls than someone rushing on a phone.
+- Give a persona a measurable goal, like exporting in three keystrokes or fewer, and track your progress across every run.
+
+## Setup
+
+Setup happens in a quick chat. An agent handles the wiring while you shape the personas. Nothing gets committed until you decide it's ready.
+
+1. The agent learns what your app does and who it's for.
+2. You keep, rename, or tweak the personas it suggests.
+3. The agent makes sure your app starts cleanly.
+4. Each persona is saved as a file in your project.
+5. Run your personas to test your app from their perspective.
+
+Works with web apps out of the box and takes a few minutes: [load the plugin](#installation), open your project in Orca, and press **Set up personas** in the Persona Studio sidebar.
+
+<details>
+<summary><b>Not a web app? Bring your own harness</b> (CLI, desktop app, API)</summary>
+
+1. Once you have personas (setup makes them for any app), set `runPrompt` in `persona.studio` to a `.md` path or inline prompt telling the agent how to start and drive your app, where to write its results, and to write `{doneFile}` when finished.
+2. Optionally set `reviewPrompt` for a second agent that turns raw run output into findings.
+
+See [CONTRACT.md](plugin/CONTRACT.md) for the full spec (placeholders, results format, and done files).
+
+</details>
 
 ## How it works
 
@@ -85,7 +118,7 @@ A prompt that's one line ending in `.md` is read from that file; anything else i
 
 ### Sidebar
 
-The **Persona Studio** panel follows the project you have open in Orca. It shows how many findings are New, Kept, Working and Fixed (each count opens the tab on that list), then your personas, each with how many new findings it has. Pressing a persona opens the tab filtered to it. A persona that's idle has **Run** (**Run again** once it has run before), a running one shows its newest progress line with **Stop**, and **Run all idle** starts every persona that isn't running.
+The **Persona Studio** panel follows the project you have open in Orca. It shows how many findings are New, Kept, Working and Fixed (each count opens the tab on that list), then your personas, each with how many new findings it has. Pressing a persona, or its **View**, opens the tab on it. A persona that's idle has **Run** (**Run again** once it has run before), a running one shows its newest progress line and its step (2/3) with **Stop**, and one whose last run failed says so (the reason is on its page in the tab). **Run all idle** starts every persona that isn't running, and **Open Studio** opens the tab. Before a project has personas, the sidebar shows the setup steps and **Set up personas**.
 
 ### The tab
 
@@ -104,12 +137,17 @@ The plugin is TypeScript with no build step: Orca loads `plugin/src/` directly. 
 
 ```sh
 orca plugin test plugin                       # tests
-npx --yes -p typescript@5 tsc -p plugin       # types; prints nothing when clean
+orca plugin types plugin                      # writes the Orca typings tsc needs (once per Orca update)
+npx --yes -p typescript@5 tsc -p plugin --noEmit  # types; prints nothing when clean
+orca plugin check plugin                      # renders each sidebar state and loads the tab
+orca plugin validate plugin                   # the manifest, as Orca will load it
 ```
+
+CI runs these on Linux against a pinned Orca and against Orca's newest release, which it also checks weekly. It takes Orca's CLI from the Linux package rather than installing the app.
 
 - `plugin/src/`: the worker, the sidebar, the tab, and their tests
 - `plugin/CONTRACT.md`: what a project provides
-- `docs/mockups/`: the clickable mockup the screens are built from
+- `.github/workflows/ci.yml`: the CI workflow
 
 ## License
 

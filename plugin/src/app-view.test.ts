@@ -2,7 +2,7 @@ import { assert, test } from 'orca/testing'
 import { detailPane, dialog, freshUi, header, listPane, noticeBar, personaPane, zeroPane, type Ui } from './app-view'
 import type { Row } from './findings-view'
 import type { FindingState } from './model'
-import { statusOf, type Detail, type Overview, type PersonaDetail, type PersonaRow, type ReportView } from './protocol'
+import { statusOf, stepOf, type Detail, type Overview, type PersonaDetail, type PersonaRow, type ReportView } from './protocol'
 
 const overview = (over: Partial<Overview> = {}): Overview => ({
   hasGh: true, canRun: null, configError: null,
@@ -200,6 +200,14 @@ test('the active persona shows in the header, with its switcher and a clear butt
   assert.equal(buttons(html).find((b) => b.attrs['data-do'] === 'everyone')!.attrs['aria-label'], 'Clear the active persona')
   assert.ok(!header(overview(), ui({ persona: 'gone' })).includes('data-do="everyone"'), 'a persona that has gone shows as none')
   assert.ok(!words(listPane([row('a')], overview(), ui({ persona: 'priya' }))).includes('Only'))
+})
+
+test('stepOf: the script step as n/total, or nothing when the line has none', () => {
+  const run = (line?: string): PersonaRow => ({ id: 'dex', name: 'Dex', tag: '', state: 'running', fresh: 0, runs: 0, recheck: 0, line })
+  assert.equal(stepOf(run('Step 2 of 3: Export my .ans')), '2/3')
+  assert.equal(stepOf(run('  step 10 of 12  ')), '10/12')
+  assert.equal(stepOf(run('Reproducing F8')), undefined)
+  assert.equal(stepOf(run()), undefined)
 })
 
 test('statusOf: the stage, the script step as n/total and what it is doing; or the stage and the line', () => {

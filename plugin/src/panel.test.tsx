@@ -46,9 +46,15 @@ test('a project with no personas and no findings shows the invitation and only S
   assert.ok(p.find({ text: "See your app through your users' eyes" }))
   assert.equal(p.findAll({ type: 'Image' }).length, 1)
   assert.deepEqual(p.findAll({ type: 'Button' }).map((x) => x.text), ['Set up personas'])
+  // The setup steps, numbered, so the owner knows what pressing the button starts.
+  assert.ok(p.find({ text: /Setup is a quick chat with an agent/ }))
+  assert.deepEqual(['1', '2', '3', '4', '5'].map((n) => p.find({ type: 'Text', text: n }) !== null), [true, true, true, true, true])
+  assert.ok(p.find({ text: /learns what your app does/ }) && p.find({ text: /Run your personas/ }))
   await p.press({ type: 'Button', text: 'Set up personas' })
   assert.deepEqual(setups, [{ project: 'app' }])
   assert.deepEqual(calls, [])
+  await p.press({ type: 'Link', text: 'How it works' })
+  assert.deepEqual(calls, [{ project: 'app', show: { persona: null } }])
   clean(p)
 })
 
@@ -290,4 +296,14 @@ test('a running persona on a script step shows n/total beside its name, and the 
   assert.ok(p.find({ type: 'Text', text: '2/3' }))
   assert.ok(p.find({ type: 'Text', text: 'Using the app · Make a checklist' }))
   clean(p)
+})
+
+test('a running row shows its script step as n/total, and nothing when the line has no step', async () => {
+  const stepping = () => overview({ personas: [{ ...row('dex', 'Dex', 'draws by hand'), state: 'running', line: 'Step 4 of 9: Opening the editor', chat: "Dex's run" }] })
+  const p = await mount(panel, { host: boot(project, stepping).host })
+  assert.ok(p.find({ type: 'Text', text: '4/9' }))
+  clean(p)
+  const q = await mount(panel, { host: boot(project, running).host })
+  assert.equal(q.find({ type: 'Text', text: /^\d+\/\d+$/ }), null)
+  clean(q)
 })

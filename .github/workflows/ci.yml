@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # Orca ships often; a weekly run against its newest release catches host API changes early.
+  schedule:
+    - cron: "0 14 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    name: Plugin (Orca ${{ matrix.orca }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # A pinned Orca, so a build means the same thing twice, and whatever Orca released last.
+        orca: ["1.4.265", latest]
+    # On a push or PR, a failure on the newest Orca is a heads-up, not a broken build; the weekly run fails loudly.
+    continue-on-error: ${{ matrix.orca == 'latest' && github.event_name != 'schedule' }}
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve the Orca version
+        id: orca
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ matrix.orca }}"
+          if [ "$v" = latest ]; then v=$(gh api repos/stablyai/orca/releases/latest --jq .tag_name); fi
+          v="${v#v}"
+          # Orca's repo also publishes mobile releases; only a desktop version has the .deb.
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::Not a desktop Orca version: $v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Orca CLI
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.orca-cli
+          key: orca-cli-${{ steps.orca.outputs.version }}-linux-x64
+
+      # Orca's CLI and its plugin test kit run on plain Node, so CI takes them from the Linux
+      # package without installing the app: the CLI, its node_modules and the plugin kit.
+      - name: Download the Orca CLI
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.orca.outputs.version }}
+        run: |
+          gh release download "v$V" -R stablyai/orca -p "orca-ide_${V}_amd64.deb" -O "$RUNNER_TEMP/orca.deb"
+          mkdir -p ~/.orca-cli
+          dpkg-deb --fsys-tarfile "$RUNNER_TEMP/orca.deb" | tar -x -f - -C ~/.orca-cli --strip-components=4 \
+            ./opt/Orca/resources/app.asar.unpacked ./opt/Orca/resources/node_modules ./opt/Orca/resources/plugins
+
+      - name: Put orca on the PATH
+        run: |
+          mkdir -p ~/.orca-cli/bin
+          printf '#!/bin/sh\nexec node "$HOME/.orca-cli/app.asar.unpacked/out/cli/index.js" "$@"\n' > ~/.orca-cli/bin/orca
+          chmod +x ~/.orca-cli/bin/orca
+          echo "$HOME/.orca-cli/bin" >> "$GITHUB_PATH"
+
+      - name: Validate the manifest
+        run: orca plugin validate .
+
+      # The typings come from the Orca in use; tsc needs them before it can check anything.
+      - name: Type check
+        run: |
+          orca plugin types .
+          npx --yes -p typescript@5 tsc -p . --noEmit
+
+      - name: Test
+        run: orca plugin test .
+
+      - name: Check the panel and the tab
+        run: orca plugin check .
