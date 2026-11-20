@@ -32,9 +32,9 @@ jobs:
       run:
         working-directory: plugin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -52,7 +52,7 @@ jobs:
 
       - name: Cache the Orca CLI
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.orca-cli
           key: orca-cli-${{ steps.orca.outputs.version }}-linux-x64
