@@ -7,9 +7,11 @@ import { CONTRACT_URL, statusOf, type Detail, type Overview, type PersonaDetail,
 import { SAMPLE_PORTRAITS } from './samples'
 import { drawTrend, esc, type Trend } from './trends-draw'
 
+/** A run that uncommitted changes held back, to start anyway. */
+export type RunAgain = { persona: string; name: string; focus?: string }
 /** What the owner chose or typed on the tab. It outlives refetches. `notes`: the open finding's draft, `base` the mtime it started from. */
 export interface Ui { tab: FindingState; persona: string | null; kind: Kind | 'all'; q: string; open: string | null
-  picked: string[]; view: 'list' | 'detail'; notice: { text: string; undo?: string } | null
+  picked: string[]; view: 'list' | 'detail'; notice: { text: string; undo?: string; anyway?: RunAgain } | null
   /** `opened`: a finding was opened from the list, so it shows instead of the chosen persona's pane (`personaDetail`). */
   opened: boolean; personaDetail: PersonaDetail | null
   dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string }
@@ -240,7 +242,7 @@ export function dialog(ui: Ui, all: readonly Row[]): string {
 export function noticeBar(ui: Ui): string {
   const n = ui.notice
   return `<div class="notice" role="region" aria-label="Notifications" aria-live="polite">${n ? `<p>${esc(n.text)}</p>`
-    + (n.undo ? btn('Undo', { 'data-do': 'undo' }, 'btn small') : '') + btn(icon('x'), { 'data-do': 'dismiss', 'aria-label': 'Dismiss' }, 'btn small ghost') : ''}</div>`
+    + (n.undo ? btn('Undo', { 'data-do': 'undo' }, 'btn small') : '') + (n.anyway ? btn('Run anyway', { 'data-do': 'run-anyway' }, 'btn small') : '') + btn(icon('x'), { 'data-do': 'dismiss', 'aria-label': 'Dismiss' }, 'btn small ghost') : ''}</div>`
 }
 
 /** The whole tab before a project has personas: what a persona is, why they help, what setup is, and Set up personas.

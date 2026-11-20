@@ -350,7 +350,16 @@ export default function activate(orca: OrcaWorkerApi): void {
     if (!s) throw invalid(`There's no persona "${persona}" in ${p.name}.`)
     return openFile(s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
   })
-  handle('run.start', async ({ project, persona, focus }) => { await runs.start(await projectOf(project), persona, focus); return ok })
+  // A run tests the last commit, so uncommitted changes would silently miss it: say so first, unless told to run anyway.
+  handle('run.start', async ({ project, persona, focus, anyway }) => {
+    const p = await projectOf(project)
+    if (!anyway) {
+      const uncommitted = await (await env()).tools.uncommitted(p.path)
+      if (uncommitted > 0) return { uncommitted }
+    }
+    await runs.start(p, persona, focus)
+    return ok
+  })
   handle('run.stop', async ({ project, persona }) => { await runs.stop(await projectOf(project), persona); return ok })
   // ponytail: Orca can't focus one chat tab, only show its workspace; the tab says which chat to look at.
   handle('run.watch', async ({ project, persona }) => {

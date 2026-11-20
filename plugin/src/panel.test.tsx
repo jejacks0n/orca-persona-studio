@@ -307,3 +307,19 @@ test('a running row shows its script step as n/total, and nothing when the line 
   assert.equal(q.find({ type: 'Text', text: /^\d+\/\d+$/ }), null)
   clean(q)
 })
+
+test('uncommitted changes hold Run and Run all idle back with Run anyway; Cancel drops them', async () => {
+  const started: unknown[] = []
+  const { host } = boot(project, running, { 'run.start': (i: { anyway?: boolean }) => { started.push(i); return i.anyway ? { ok: true } : { uncommitted: 1 } } })
+  const p = await mount(panel, { host })
+  await p.press({ type: 'Button', text: 'Run all idle' })
+  assert.ok(p.find({ text: '1 file has uncommitted changes. Commit them first, or run anyway to test your last commit.' }))
+  await p.press({ type: 'Button', text: 'Run anyway' })
+  const idle = ['maya', 'lea', 'walt']
+  assert.deepEqual(started, [...idle.map((persona) => ({ project: 'app', persona })), ...idle.map((persona) => ({ project: 'app', persona, anyway: true }))])
+  assert.equal(p.find({ type: 'Button', text: 'Run anyway' }), null)
+  await p.press({ type: 'Button', text: 'Run' })
+  await p.press({ type: 'Button', text: 'Cancel' })
+  assert.equal(p.find({ text: /uncommitted changes/ }), null)
+  clean(p)
+})

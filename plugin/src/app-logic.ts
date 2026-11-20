@@ -1,11 +1,11 @@
 // What the Persona Studio tab does, apart from drawing: which request a control sends, what typing changes, and what
 // survives a refetch. Pure, so it runs in tests; src/app.ts wires it to the page and src/app-view.ts draws it.
 import type { PluginPanelEvents, PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca'
-import type { Ui } from './app-view'
+import type { RunAgain, Ui } from './app-view'
 import type { Action } from './finding'
 import { rows as listed, type Row } from './findings-view'
 import { reasonWord, STATES, type CloseReason, type FindingState, type Kind } from './model'
-import { setupWords, type Detail, type PersonaRow, type Show } from './protocol'
+import { setupWords, uncommittedWords, type Detail, type PersonaRow, type Show } from './protocol'
 
 type Request = { [K in keyof PluginRequests]: { name: K; input: PluginRequestInput<K> } }[keyof PluginRequests]
 /** A control's effect: a request to the worker (`then` changes the tab once it worked), a change to the tab alone, or a link to open. */
@@ -17,6 +17,10 @@ const ask = <K extends keyof PluginRequests>(name: K, input: PluginRequestInput<
 const change = (f: (ui: Ui) => Ui): Act => ({ ui: f })
 const say = (text: string, undo?: string | null) => (ui: Ui): Ui => ({ ...ui, notice: undo ? { text, undo } : { text } })
 const started = (name: string) => say(`${name} is running in its own copy. Carry on with the others.`)
+/** Start a run; uncommitted changes hold it back, and the notice offers Run anyway. */
+const startRun = (project: string, again: RunAgain, anyway = false): Act =>
+  ask('run.start', { project, persona: again.persona, ...(again.focus && { focus: again.focus }), ...(anyway && { anyway }) },
+    (u, out) => ('uncommitted' in out ? { ...u, notice: { text: uncommittedWords(out.uncommitted), anyway: again } } : started(again.name)(u)))
 const KINDS: readonly string[] = ['all', 'bug', 'missing', 'polish']
 const toggle = (list: readonly string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
 const counted = (word: string, n: number) => (n > 1 ? `${word} ${n}` : word)
@@ -58,13 +62,14 @@ export function actionOf(d: Partial<Record<string, string>>, ui: Ui, ctx: Ctx): 
     case 'bulk-close': return ui.picked.length ? change((u) => ({ ...u, dialog: { type: 'close', ids: [...ui.picked] } })) : null
     case 'setup': return ask('setup.start', { project }, (u, out) => say(setupWords(out.existing))(u))
     // Undo acts on the notice, not the open finding.
+    case 'run-anyway': return ui.notice?.anyway ? startRun(project, ui.notice.anyway, true) : null
     case 'undo': return ui.notice?.undo ? ask('findings.undo', { project, token: ui.notice.undo }, say('Undone.')) : null
     case 'submit': return submitted(ui, ctx)
     case 'run': {
       const row = ui.personaDetail?.row
       if (!row || row.id !== d.persona) return null
       // A first run has nothing to recheck: it starts at once.
-      return row.runs === 0 ? ask('run.start', { project, persona: row.id }, started(row.name))
+      return row.runs === 0 ? startRun(project, { persona: row.id, name: row.name })
         : change((u) => ({ ...u, dialog: { type: 'run', persona: row.id, name: row.name, recheck: row.recheck } }))
     }
     case 'edit-persona': return d.persona ? ask('persona.open', { project, persona: d.persona }) : null
@@ -108,7 +113,7 @@ function submitted(ui: Ui, { project, rows, form = {} }: Ctx): Act {
   if (!g) return null
   if (g.type === 'run') {
     const focus = text('focus')
-    return ask('run.start', { project, persona: g.persona, ...(focus && { focus }) }, started(g.name))
+    return startRun(project, { persona: g.persona, name: g.name, ...(focus && { focus }) })
   }
   if (g.type === 'close') {
     const reason = form.reason as CloseReason

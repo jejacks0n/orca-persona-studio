@@ -16,6 +16,9 @@ export const CONTRACT_URL = 'https://github.com/jejacks0n/orca-persona-studio/bl
 
 export const setupWords = (existing: boolean): string => (existing ? 'Setup is already open in your tabs as "Set up personas".'
   : 'Setup is open in the "Set up personas" chat. Your personas will appear here once they\'re saved.')
+/** Why a run held back, and what to do: commit, or run anyway on the last commit. */
+export const uncommittedWords = (n: number): string =>
+  `${n === 1 ? '1 file has' : `${n} files have`} uncommitted changes. Commit them first, or run anyway to test your last commit.`
 /** An error in its own words. */
 export const say = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
@@ -84,7 +87,8 @@ declare module 'orca' {
     /** One worktree for all of `ids`, named `name`; or with `each`, one each, named from its title (`name` unused). `autoPr`: each agent opens its PR when done. */
     'work.start': { input: { project: string; ids: string[]; name: string; base: string; each?: boolean; autoPr?: boolean }; output: { ok: true } }
     'tick': { output: { ok: true } }
-    'run.start': { input: { project: string; persona: string; focus?: string }; output: { ok: true } }
+    /** Without `anyway`, a checkout with uncommitted changes doesn't start: it answers how many files have them. */
+    'run.start': { input: { project: string; persona: string; focus?: string; anyway?: boolean }; output: { ok: true } | { uncommitted: number } }
     'run.stop': { input: { project: string; persona: string }; output: { ok: true } }
     'run.watch': { input: { project: string; persona: string }; output: { ok: true } }
     'persona.get': { input: { project: string; persona: string }; output: PersonaDetail }

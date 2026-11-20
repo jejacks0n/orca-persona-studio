@@ -1,7 +1,7 @@
 // The Persona Studio sidebar: counts of findings by list, the project's personas, and ways to open the tab (src/app.ts).
 // No build step: Orca strips the types and compiles the JSX when the panel loads.
 import { Box, Button, Image, Callout, Link, Row, Separator, Skeleton, Spinner, Stack, Text, atom, plugin, read, set, type PanelContext } from 'orca'
-import { focusWords, say, setupWords, statusOf, stepOf, type Focus, type Overview, type PersonaRow, type Show } from './protocol'
+import { focusWords, say, setupWords, statusOf, stepOf, uncommittedWords, type Focus, type Overview, type PersonaRow, type Show } from './protocol'
 import { stateWord } from './model'
 
 const focus = atom<Focus | null>(null)
@@ -12,6 +12,8 @@ const problem = atom('')
 const stale = atom('')
 /** The last request timed out: the worker is still on it, and its post brings the result. */
 const slow = atom(false)
+/** Runs held back because the project has uncommitted changes, until Run anyway or Cancel. */
+const held = atom<{ project: string; ids: string[]; n: number } | null>(null)
 /** Where setup is, after pressing Set up personas. */
 const notice = atom<{ project: string; text: string } | null>(null)
 
@@ -53,23 +55,30 @@ async function startSetup(project: string): Promise<void> {
   }
 }
 
-/** Start or stop a run. A refusal shows and returns its message; a timeout isn't one, the worker carries on. */
-async function runCall(name: 'run.start' | 'run.stop', project: string, persona: string): Promise<string> {
-  try { await plugin.request(name, { project, persona }); return '' } catch (e) {
+/** Start or stop a run. A refusal shows and returns its message; a run held back by uncommitted changes returns how many
+ *  files have them; a timeout isn't a refusal, the worker carries on. */
+async function runCall(name: 'run.start' | 'run.stop', project: string, persona: string, anyway = false): Promise<string | number> {
+  try {
+    const out = name === 'run.start' ? await plugin.request(name, { project, persona, ...(anyway && { anyway }) })
+      : await plugin.request(name, { project, persona })
+    return 'uncommitted' in out ? out.uncommitted : ''
+  } catch (e) {
     if ((e as { code?: string }).code === 'timeout') { set(slow, true); return '' }
     return say(e)
   }
 }
-async function runOne(project: string, persona: string, name: 'run.start' | 'run.stop'): Promise<void> {
-  set(problem, ''); set(slow, false)
-  set(problem, await runCall(name, project, persona))
-}
-/** Every idle persona in turn: one refused doesn't stop the rest, and each refusal shows. */
-async function runAll(project: string, ids: string[]): Promise<void> {
-  set(problem, ''); set(slow, false)
-  const said: string[] = []
-  for (const id of ids) { const m = await runCall('run.start', project, id); if (m) said.push(m) }
+/** Start or stop the given personas in turn: one refused doesn't stop the rest, and each refusal shows. Runs held back by
+ *  uncommitted changes wait together for Run anyway. */
+async function runSome(project: string, ids: string[], name: 'run.start' | 'run.stop' = 'run.start', anyway = false): Promise<void> {
+  set(problem, ''); set(slow, false); set(held, null)
+  const said: string[] = [], waiting: string[] = []
+  let n = 0
+  for (const id of ids) {
+    const out = await runCall(name, project, id, anyway)
+    if (typeof out === 'number') { waiting.push(id); n = Math.max(n, out) } else if (out) said.push(out)
+  }
   set(problem, said.join(' '))
+  if (waiting.length) set(held, { project, ids: waiting, n })
 }
 
 export function setup(ctx: PanelContext) {
@@ -96,6 +105,23 @@ const SETUP_STEPS = [
 
 const describe = (p: PersonaRow) => (p.state === 'running' ? statusOf(p, false) : p.tag === '' ? undefined : p.tag)
 
+/** Uncommitted changes held a run back: say so, with Run anyway. */
+function heldView(project: string) {
+  const h = read(held)
+  if (h?.project !== project) return null
+  return (
+    <Callout tone="warning">
+      <Stack gap="sm">
+        <Text size="sm">{uncommittedWords(h.n)}</Text>
+        <Row gap="sm">
+          <Button size="xs" variant="outline" onPress={() => runSome(project, h.ids, 'run.start', true)}>Run anyway</Button>
+          <Button size="xs" variant="ghost" onPress={() => set(held, null)}>Cancel</Button>
+        </Row>
+      </Stack>
+    </Callout>
+  )
+}
+
 const problemView = () => (read(slow) ? <Callout tone="neutral">Still working on it; this will update when it's done.</Callout>
   : read(problem) + read(stale) === '' ? null : <Callout tone="danger" title="That didn't work">{read(problem) || read(stale)}</Callout>)
 
@@ -116,6 +142,7 @@ export default function Panel() {
     <Box paddingX="xs" paddingY="md" gap="md">
       {o.configError !== null && <Callout tone="danger" title="Persona Studio can't load this project">{o.configError}</Callout>}
       {problemView()}
+      {heldView(f.id)}
       {read(notice)?.project === f.id && o.personas.length === 0 && <Callout tone="neutral">{read(notice)!.text}</Callout>}
       {(hasFindings || o.personas.length > 0) && (
         // Orca's Button takes only text, so each count is a tile whose label is the press target.
@@ -156,7 +183,7 @@ export default function Panel() {
           <Row justify="between" align="center">
             <Text size="xs" muted weight="semibold">Personas</Text>
             <Row gap="xs" align="center">
-              {idle.length > 0 && o.canRun === null && <Button size="xs" variant="ghost" icon="play" onPress={() => runAll(f.id, idle.map((p) => p.id))}>Run all idle</Button>}
+              {idle.length > 0 && o.canRun === null && <Button size="xs" variant="ghost" icon="play" onPress={() => runSome(f.id, idle.map((p) => p.id))}>Run all idle</Button>}
               <Button size="xs" variant="solid" tone="accent" onPress={() => open(f.id, { persona: null })}>Open Studio</Button>
             </Row>
           </Row>
@@ -179,9 +206,9 @@ export default function Panel() {
                     </Row>
                   </Box>
                   <Button size="xs" variant="outline" onPress={() => open(f.id, { persona: p.id })}>View</Button>
-                  {p.state === 'running' ? <Button size="xs" variant="outline" icon="stop" onPress={() => runOne(f.id, p.id, 'run.stop')}>Stop</Button>
+                  {p.state === 'running' ? <Button size="xs" variant="outline" icon="stop" onPress={() => runSome(f.id, [p.id], 'run.stop')}>Stop</Button>
                     : o.canRun !== null ? null
-                    : p.runs === 0 ? <Button size="xs" variant="outline" icon="play" onPress={() => runOne(f.id, p.id, 'run.start')}>Run</Button>
+                    : p.runs === 0 ? <Button size="xs" variant="outline" icon="play" onPress={() => runSome(f.id, [p.id])}>Run</Button>
                     : <Button size="xs" variant="outline" icon="refresh" onPress={() => open(f.id, { persona: p.id, run: true })}>Run again</Button>}
                 </Box>
               </Stack>

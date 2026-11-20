@@ -264,6 +264,18 @@ test('the run dialog sends run.start with the trimmed focus, and leaves it out w
   assert.deepEqual(request(act({ do: 'submit' }, u, { focus: '   ' })).request.input, { project: 'p1', persona: 'dex' })
 })
 
+test('uncommitted changes hold a run back in the notice, with Run anyway, which keeps the focus', () => {
+  const u = ui({ dialog: { type: 'run', persona: 'dex', name: 'Dex', recheck: 0 } })
+  const a = request(act({ do: 'submit' }, u, { focus: 'the export' }))
+  const held = a.then!(u, { uncommitted: 3 })
+  assert.deepEqual(held.notice, { text: '3 files have uncommitted changes. Commit them first, or run anyway to test your last commit.',
+    anyway: { persona: 'dex', name: 'Dex', focus: 'the export' } })
+  const again = request(act({ do: 'run-anyway' }, held))
+  assert.deepEqual(again.request, { name: 'run.start', input: { project: 'p1', persona: 'dex', focus: 'the export', anyway: true } })
+  assert.equal(again.then!(held, { ok: true }).notice?.text, 'Dex is running in its own copy. Carry on with the others.')
+  assert.equal(act({ do: 'run-anyway' }, ui()), null)
+})
+
 test('Run starts a first run at once and opens the dialog for a later one; Stop and Watch say what happened', () => {
   const first = ui({ personaDetail: person(0) })
   assert.deepEqual(request(act({ do: 'run', persona: 'dex' }, first)).request, { name: 'run.start', input: { project: 'p1', persona: 'dex' } })

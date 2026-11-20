@@ -40,7 +40,9 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   /** Held before answering the nth agent launch. */
   holdLaunch?: (n: number) => Promise<void> | undefined
   /** workspace.list names branches as refs/heads/<name>. */
-  refs?: boolean } = {}) {
+  refs?: boolean
+  /** What `git status --porcelain` says about the project's checkout: its uncommitted files. */
+  status?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'studio-runs-')), root = `${dir}-files`, qaRoot = `${dir}-qa`
   cleanup.push(() => { for (const d of [dir, root, qaRoot]) rmSync(d, { recursive: true, force: true }) })
   cpSync(fixture('project'), dir, { recursive: true })
@@ -70,6 +72,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
       return ok(JSON.stringify({ result: { outcome: { sessionId: `s${n}` } } }))
     }
     if (args[0] === 'agent' && args[1] === 'list') return ok(JSON.stringify({ result: { agents } }))
+    if (args[0] === 'status' && args[1] === '--porcelain') return ok(o.status ?? '')
     return ok('')
   }
   worker.setRunner(runner)
@@ -116,6 +119,19 @@ function done(files: string, taskId: string, v: unknown) {
 const NO_START = `Persona Studio doesn't know how to start this app yet. Set "start" in persona.studio, or set up personas.`
 /** The fixture's own-harness prompts: a run prompt without {port}, and a review prompt. */
 const harness = { start: undefined, runPrompt: 'docs/qa/run-prompt.md', reviewPrompt: 'docs/qa/review-prompt.md' }
+
+test('uncommitted changes hold a run back with how many files have them; anyway starts it on the last commit', async () => {
+  const { host, w, calls, made } = await setup({ status: ' M src/app.ts\n?? notes.md\n' })
+  assert.deepEqual(await start(w), { uncommitted: 2 })
+  assert.equal(runOf(host), undefined)
+  assert.deepEqual(made, [])
+  assert.deepEqual(await w.request('run.start', { project: 'app', persona: 'maya', anyway: true }), { ok: true })
+  await using(host)
+  // The persona's copy is reset to the local branch, never origin's.
+  assert.ok(calls.some((a) => a.join(' ') === 'reset --hard main'))
+  assert.equal(calls.some((a) => a.includes('fetch')), false)
+  await w.request('run.stop', { project: 'app', persona: 'maya' })
+})
 
 test('run.start makes the QA worktree, resets it, starts the app and launches the run chat', async () => {
   const { dir, files, host, w, calls, made } = await setup()

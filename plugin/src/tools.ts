@@ -19,8 +19,10 @@ export interface Tools {
   /** Origin's URL; null when the repo has no origin. */
   remoteUrl(path: string): Promise<string | null>
   createWorktree(o: { projectPath: string; name: string; branch: string; base: string; setup: Config['setup'] }): Promise<void>
-  /** Reset to `branch` as committed: origin's copy when origin has it, else the local branch. */
+  /** Reset to the local `branch` as committed. */
   resetQa(path: string, branch: string): Promise<void>
+  /** How many files in the checkout at `path` have changes that aren't committed, new files included. */
+  uncommitted(path: string): Promise<number>
   createIssue(repo: string, title: string, body: string): Promise<{ number: number; url: string }>
   /** Closes the issue as not planned. */
   closeIssue(repo: string, number: number): Promise<void>
@@ -75,11 +77,6 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
     if (r.code === 1) return false
     throw fail(paths.git, args, r)
   }
-  /** Whether git knows origin's copy of `branch`. */
-  const onOrigin = async (path: string, branch: string) => {
-    abs(path)
-    return yesNo(['-C', path, 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
-  }
   const headOf = async (path: string, ref: string) => {
     abs(path)
     return (await ok(paths.git, ['-C', path, 'rev-parse', '--verify', ref])).trim()
@@ -97,9 +94,11 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
     },
     async resetQa(path, branch) {
       abs(path)
-      if (!(await onOrigin(path, branch))) return void await ok(paths.git, ['reset', '--hard', branch], path)
-      await ok(paths.git, ['fetch', 'origin', branch], path)
-      await ok(paths.git, ['reset', '--hard', `origin/${branch}`], path)
+      await ok(paths.git, ['reset', '--hard', branch], path)
+    },
+    async uncommitted(path) {
+      abs(path)
+      return (await ok(paths.git, ['status', '--porcelain'], path)).split('\n').filter(Boolean).length
     },
     async createIssue(repo, title, body) {
       const g = gh()

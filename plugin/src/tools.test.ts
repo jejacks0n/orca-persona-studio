@@ -43,22 +43,17 @@ test('createWorktree runs orca worktree create with every flag, allowing it 15 m
     'worktree', 'create', '--repo', 'path:/p', '--name', 'n', '--branch', 'b', '--base-branch', 'main', '--setup', 'run', '--no-parent', '--json'] }])
 })
 
-const onOrigin = (branch: string) => ({ cmd: 'git', args: ['-C', '/w', 'rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`], cwd: undefined })
-
-test('resetQa fetches then hard-resets to origin\'s copy of the branch when origin has it', async () => {
+test('resetQa hard-resets to the local branch, whether or not origin has it', async () => {
   const f = fake()
   await f.tools.resetQa('/w', 'feat/x')
-  assert.deepEqual(f.calls, [
-    onOrigin('feat/x'),
-    { cmd: 'git', args: ['fetch', 'origin', 'feat/x'], cwd: '/w' },
-    { cmd: 'git', args: ['reset', '--hard', 'origin/feat/x'], cwd: '/w' },
-  ])
+  assert.deepEqual(f.calls, [{ cmd: 'git', args: ['reset', '--hard', 'feat/x'], cwd: '/w' }])
 })
 
-test('resetQa hard-resets to the local branch when origin does not have it', async () => {
-  const f = fake([{ code: 1 }])
-  await f.tools.resetQa('/w', 'feat/x')
-  assert.deepEqual(f.calls, [onOrigin('feat/x'), { cmd: 'git', args: ['reset', '--hard', 'feat/x'], cwd: '/w' }])
+test('uncommitted counts the files git status lists, new ones included', async () => {
+  const f = fake([{ stdout: ' M src/a.ts\nA  src/b.ts\n?? notes.md\n' }, { stdout: '' }])
+  assert.equal(await f.tools.uncommitted('/w'), 3)
+  assert.equal(await f.tools.uncommitted('/w'), 0)
+  assert.deepEqual(f.calls[0], { cmd: 'git', args: ['status', '--porcelain'], cwd: '/w' })
 })
 
 test('terminals and worktrees read orca\'s JSON lists', async () => {
@@ -138,6 +133,7 @@ test('an empty or relative path is refused before any command runs', async () =>
   for (const p of bad) {
     for (const call of [
       () => f.tools.resetQa(p, 'main'),
+      () => f.tools.uncommitted(p),
       () => f.tools.mainCheckout(p),
       () => f.tools.headOf(p, 'HEAD'),
       () => f.tools.remoteUrl(p),
