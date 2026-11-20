@@ -12,6 +12,8 @@ import type { Runner } from './tools'
 import * as worker from './worker'
 
 const cleanup: (() => unknown)[] = []
+// No test here opens the phone page's port.
+worker.setWebStarter(() => ({ broadcast() {}, close: async () => {}, port: () => 0 }))
 const hosts: MockHost[] = []
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f()
@@ -460,4 +462,13 @@ test('persona.get lists every goal, met or not, with a trend for a counted one',
   assert.deepEqual([d.row.runs, d.lines, d.branch, d.port], [2, [], null, null])
   assert.match(d.who[0], /^Maya is a hobby photographer/)
   await assert.rejects(w.request('persona.get', { project: 'app', persona: 'zed' }), (e: any) => e.code === 'invalid_params')
+})
+
+test('run.idle starts each idle persona and leaves a running one be', async () => {
+  const { host, w, made } = await setup()
+  await start(w, 'maya')
+  await using(host)
+  assert.deepEqual(await w.request('run.idle', { project: 'app' }), { said: '' })
+  await using(host, 'dex')
+  assert.deepEqual(made.map((m) => m.name), ['qa-maya', 'qa-dex'])
 })

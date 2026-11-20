@@ -1,5 +1,5 @@
 // What the Persona Studio tab does, apart from drawing: which request a control sends, what typing changes, and what
-// survives a refetch. Pure, so it runs in tests; src/app.ts wires it to the page and src/app-view.ts draws it.
+// survives a refetch. Pure, so it runs in tests; src/app-glue.ts wires it to the page and src/app-view.ts draws it.
 import type { PluginPanelEvents, PluginRequestInput, PluginRequestOutput, PluginRequests } from 'orca'
 import type { Ui } from './app-view'
 import type { Action } from './finding'
@@ -10,7 +10,7 @@ import { setupWords, type Detail, type PersonaRow, type Show } from './protocol'
 type Request = { [K in keyof PluginRequests]: { name: K; input: PluginRequestInput<K> } }[keyof PluginRequests]
 /** A control's effect: a request to the worker (`then` changes the tab once it worked), a change to the tab alone, or a link to open. */
 export type Act = { request: Request; then?: (ui: Ui, output: unknown) => Ui } | { ui: (ui: Ui) => Ui } | { link: string } | null
-export interface Ctx { project: string; rows: readonly Row[]; form?: Record<string, string>; shots?: Record<string, string | null> }
+export interface Ctx { project: string; rows: readonly Row[]; form?: Record<string, string>; shots?: Record<string, string | null>; phone?: boolean }
 
 const ask = <K extends keyof PluginRequests>(name: K, input: PluginRequestInput<K>, then?: (ui: Ui, out: PluginRequestOutput<K>) => Ui): Act =>
   ({ request: { name, input } as Request, ...(then && { then: then as (ui: Ui, out: unknown) => Ui }) })
@@ -67,7 +67,14 @@ export function actionOf(d: Partial<Record<string, string>>, ui: Ui, ctx: Ctx): 
       return row.runs === 0 ? ask('run.start', { project, persona: row.id }, started(row.name))
         : change((u) => ({ ...u, dialog: { type: 'run', persona: row.id, name: row.name, recheck: row.recheck } }))
     }
-    case 'edit-persona': return d.persona ? ask('persona.open', { project, persona: d.persona }) : null
+    case 'edit-persona': {
+      if (!d.persona) return null
+      if (!ctx.phone) return ask('persona.open', { project, persona: d.persona })
+      const row = ui.personaDetail?.row
+      if (!row || row.id !== d.persona) return null
+      return ask('persona.read', { project, persona: row.id }, (u, out) => ({ ...u, dialog: { type: 'persona', persona: row.id, name: row.name, text: out.text, mtime: out.mtime } }))
+    }
+    case 'run-all': return ask('run.idle', { project }, (u, out) => say(out.said || 'Started every idle persona.')(u))
     case 'stop': {
       const row = ui.personaDetail?.row
       return row && row.id === d.persona ? ask('run.stop', { project, persona: row.id }, say(`${row.name} stopped. Nothing from that run was kept.`)) : null
@@ -109,6 +116,9 @@ function submitted(ui: Ui, { project, rows, form = {} }: Ctx): Act {
   if (g.type === 'run') {
     const focus = text('focus')
     return ask('run.start', { project, persona: g.persona, ...(focus && { focus }) }, started(g.name))
+  }
+  if (g.type === 'persona') {
+    return ask('persona.write', { project, persona: g.persona, text: form.personaText ?? '', base: g.mtime }, say(`Saved ${g.name}'s persona file.`))
   }
   if (g.type === 'close') {
     const reason = form.reason as CloseReason
@@ -230,8 +240,8 @@ export function focusOf(d: Partial<Record<string, string>>): string[] {
 /** A `changed` post names the finding it touched; one naming none may have touched any. */
 export const refetchesFinding = (ui: Ui, posted: PluginPanelEvents['changed']): boolean => !!ui.open && (!posted.finding || posted.finding === ui.open)
 
-/** The root's classes: `narrow` under 700 px, where only the pane `ui.view` names shows. */
-export const rootClass = (ui: Ui, width: number): string => `app${width < 700 ? ' narrow' : ''} v-${ui.view}`
+/** The root's classes: `narrow` under 700 px (always on the phone, which adds `phone`), where only the pane `ui.view` names shows. */
+export const rootClass = (ui: Ui, width: number, phone = false): string => `app${phone || width < 700 ? ' narrow' : ''}${phone ? ' phone' : ''} v-${ui.view}`
 
 /** Whether a #rgb or #rrggbb colour is dark: its luminance is under half. */
 export function isDarkColor(hex: string): boolean {

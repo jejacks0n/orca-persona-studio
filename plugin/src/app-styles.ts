@@ -208,5 +208,63 @@ export const STYLES = `
   .brief { border: 1px solid var(--orca-border); border-radius: calc(var(--orca-radius) - 2px); background: var(--orca-background); padding: 8px 10px; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow: auto; }
   .dfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
+  .runall { margin: 8px 12px 10px; }
+
+  /* The phone page (Orca's phone browser tab, drawn by the Mac): taps are clicks, the page scrolls and nothing inside it does. */
+  .app.phone { display: block; height: auto; max-width: 640px; margin: 0 auto; padding-bottom: 140px; font-size: 16px; position: relative; }
+  .app.phone.v-detail .list, .app.phone.v-list .detail { display: none; }
+  .app.phone .list, .app.phone .detail { display: block; border: 0; }
+  .app.phone .scroll, .app.phone .brief, .app.phone .pop, .app.phone .tabs, .app.phone textarea { overflow: visible; max-height: none; flex: none; }
+  .app.phone .tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px; }
+  .app.phone .tabs button { min-height: 52px; padding: 4px 2px; font-size: 13px; }
+  .app.phone .tabs b { display: block; margin: 0; font-size: 16px; background: none; }
+  .app.phone .btn { min-height: 44px; padding: 8px 14px; font-size: 16px; white-space: normal; justify-content: center; }
+  .app.phone .btn.small { min-height: 44px; padding: 8px 12px; font-size: 16px; }
+  .app.phone .top { position: sticky; top: 0; z-index: 5; flex-wrap: wrap; padding: 8px 16px; }
+  .app.phone .brand { flex: 1 0 100%; margin: 0; }
+  .app.phone .top > .btn { flex: 1; min-width: 0; justify-content: space-between; }
+  .app.phone .top > .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The Personas button (with its clear beside it, once a persona is chosen) takes the other half. */
+  .app.phone .top > .pick { flex: 1 1 0; min-width: 0; }
+  .app.phone .pick .btn:first-child { flex: 1; min-width: 0; max-width: none; justify-content: space-between; }
+  .app.phone .pick .btn + .btn { min-width: 44px; justify-content: center; }
+  .app.phone .search { flex: 1 0 100%; max-width: none; min-height: 44px; }
+  .app.phone .seg { flex: 1 0 100%; }
+  .app.phone .seg button { flex: 1; min-height: 44px; padding: 8px; font-size: 16px; }
+  .app.phone .backbar { display: flex; padding: 4px 8px; }
+  .app.phone .row { grid-template-columns: 44px 22px minmax(0, 1fr); gap: 6px; padding: 8px 12px 8px 0; }
+  .app.phone .row input { width: 22px; height: 22px; margin: 0; align-self: center; justify-self: center; }
+  .app.phone .open { min-height: 44px; }
+  .app.phone .meta, .app.phone .hint, .app.phone .chip { font-size: 14px; }
+  .app.phone .dbody { padding: 12px 16px 20px; }
+  .app.phone .dbody h2 { font-size: 20px; } .app.phone .dbody h3 { font-size: 13px; }
+  .app.phone .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 16px 16px; }
+  .app.phone .actions .push { margin-left: 0; }
+  .app.phone textarea { field-sizing: content; }
+  .app.phone textarea, .app.phone .field input { min-height: 120px; padding: 10px 12px; font-size: 16px; resize: none; }
+  .app.phone .field input { min-height: 44px; }
+  .app.phone .shots { grid-template-columns: 1fr; }
+  /* Sheets: full width from the top, never placed against their button. */
+  .app.phone .pop { position: absolute; inset: 0 0 auto; margin: 0 auto; width: 100%; max-width: 640px; max-height: none; border-radius: 0; border-width: 0 0 1px; z-index: 10; }
+  .app.phone .pop::backdrop { background: rgb(0 0 0 / .45); }
+  .app.phone .persona { min-height: 56px; padding: 8px 16px; }
+  .app.phone .pop .runall { width: calc(100% - 32px); margin: 10px 16px 14px; }
+  .app.phone .colhead { padding: 12px 16px 8px; font-size: 13px; }
+  .app.phone .bulk { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 10px max(16px, calc((100% - 608px) / 2)); border-top: 1px solid var(--orca-border); }
+  .app.phone .bulk > span { flex: 1 0 100%; }
+  .app.phone .bulk .btn:not(.ghost) { flex: 1; }
+  .app.phone .notice { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 7; max-width: 608px; margin: 0 auto; padding: 10px 12px; min-height: 56px;
+    border: 1px solid var(--orca-border); border-radius: var(--orca-radius); }
+  .app.phone:has(.bulk) .notice { bottom: 134px; }
+  .app.phone .notice .btn { min-height: 44px; }
+  .app.phone dialog { position: absolute; inset: 0 0 auto; margin: 0 auto; width: 100%; max-width: 640px; max-height: none; border-radius: 0; border-width: 0 0 1px; box-shadow: none; font-size: 16px; }
+  .app.phone dialog form { padding: 12px 16px 20px; }
+  .app.phone dialog .brief { max-height: none; overflow: visible; font-size: 14px; }
+  .app.phone dialog textarea { min-height: 220px; font-size: 16px; resize: none; overflow: visible; }
+  .app.phone dialog .radio, .app.phone dialog .check { min-height: 48px; align-items: center; font-size: 16px; }
+  .app.phone dialog input[type=radio], .app.phone dialog input[type=checkbox] { width: 22px; height: 22px; margin: 0; }
+  .app.phone dialog .dfoot { display: grid; grid-template-columns: 1fr 1fr; }
+  .app.phone dialog .field input { min-height: 44px; font-size: 16px; padding: 8px 12px; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 `

@@ -32,6 +32,8 @@ export interface Tools {
   worktrees(): Promise<{ path: string; lastActivityAt: number }[]>
   /** Starts a chat agent in a worktree and gives its Orca session id. */
   launchChat(o: { agent: string; worktreePath: string; prompt: string; focus?: boolean }): Promise<{ session: string }>
+  /** Opens a page in an Orca browser tab in a worktree. */
+  openBrowserTab(url: string, worktreePath: string): Promise<void>
   /** The chat agents in a worktree. */
   chats(worktreePath: string): Promise<{ session: string; state: string; title: string }[]>
   sendToChat(session: string, subject: string, body: string): Promise<void>
@@ -143,6 +145,10 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
       const session = JSON.parse(out)?.result?.outcome?.sessionId
       if (typeof session !== 'string' || !session) throw new ToolError(`${paths.orca} agent launch`, 'no session id in output')
       return { session }
+    },
+    async openBrowserTab(url, worktreePath) {
+      abs(worktreePath)
+      await ok(paths.orca, ['tab', 'create', '--url', url, '--worktree', `path:${worktreePath}`, '--json'])
     },
     async chats(worktreePath) {
       abs(worktreePath)

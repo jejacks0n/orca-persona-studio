@@ -64,12 +64,13 @@ async function runOne(project: string, persona: string, name: 'run.start' | 'run
   set(problem, ''); set(slow, false)
   set(problem, await runCall(name, project, persona))
 }
-/** Every idle persona in turn: one refused doesn't stop the rest, and each refusal shows. */
-async function runAll(project: string, ids: string[]): Promise<void> {
+/** Every idle persona, started by the worker in one request: one refused doesn't stop the rest, and each refusal shows. */
+async function runAll(project: string): Promise<void> {
   set(problem, ''); set(slow, false)
-  const said: string[] = []
-  for (const id of ids) { const m = await runCall('run.start', project, id); if (m) said.push(m) }
-  set(problem, said.join(' '))
+  try { set(problem, (await plugin.request('run.idle', { project })).said) } catch (e) {
+    if ((e as { code?: string }).code === 'timeout') set(slow, true)
+    else set(problem, say(e))
+  }
 }
 
 export function setup(ctx: PanelContext) {
@@ -156,7 +157,7 @@ export default function Panel() {
           <Row justify="between" align="center">
             <Text size="xs" muted weight="semibold">Personas</Text>
             <Row gap="xs" align="center">
-              {idle.length > 0 && o.canRun === null && <Button size="xs" variant="ghost" icon="play" onPress={() => runAll(f.id, idle.map((p) => p.id))}>Run all idle</Button>}
+              {idle.length > 0 && o.canRun === null && <Button size="xs" variant="ghost" icon="play" onPress={() => runAll(f.id)}>Run all idle</Button>}
               <Button size="xs" variant="solid" tone="accent" onPress={() => open(f.id, { persona: null })}>Open Studio</Button>
             </Row>
           </Row>

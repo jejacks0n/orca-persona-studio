@@ -349,3 +349,26 @@ test('clear-q empties the search', () => {
 test('isDarkColor tells a dark terminal background from a light one, in either hex length', () => {
   assert.deepEqual(['#1c1c1c', '#151515', '#000', '#fff', '#fafafa', '#3b5bdb'].map(isDarkColor), [true, true, true, false, false, true])
 })
+
+test('run-all asks run.idle and says what came back', () => {
+  const a = request(act({ do: 'run-all' }))
+  assert.deepEqual(a.request, { name: 'run.idle', input: { project: 'p1' } })
+  assert.equal(a.then!(ui(), { said: 'Started Dex and Kai.' }).notice!.text, 'Started Dex and Kai.')
+  assert.equal(a.then!(ui(), { said: '' }).notice!.text, 'Started every idle persona.')
+})
+
+test('edit-persona opens the file in Orca on the desktop, and in a sheet on the phone', () => {
+  assert.deepEqual(request(act({ do: 'edit-persona', persona: 'dex' })).request, { name: 'persona.open', input: { project: 'p1', persona: 'dex' } })
+  const u = ui({ personaDetail: person(1) })
+  const a = request(actionOf({ do: 'edit-persona', persona: 'dex' }, u, { project: 'p1', rows: all, phone: true }))
+  assert.deepEqual(a.request, { name: 'persona.read', input: { project: 'p1', persona: 'dex' } })
+  assert.deepEqual(a.then!(u, { text: 'Dex is…', mtime: 7 }).dialog, { type: 'persona', persona: 'dex', name: 'Dex', text: 'Dex is…', mtime: 7 })
+  assert.equal(actionOf({ do: 'edit-persona', persona: 'kai' }, u, { project: 'p1', rows: all, phone: true }), null)
+})
+
+test('saving the persona sheet sends its text and base', () => {
+  const u = ui({ dialog: { type: 'persona', persona: 'dex', name: 'Dex', text: 'old', mtime: 7 } })
+  const a = request(act({ do: 'submit' }, u, { personaText: 'new text\n' }))
+  assert.deepEqual(a.request, { name: 'persona.write', input: { project: 'p1', persona: 'dex', text: 'new text\n', base: 7 } })
+  assert.equal(a.then!(u, { mtime: 8 }).notice!.text, "Saved Dex's persona file.")
+})

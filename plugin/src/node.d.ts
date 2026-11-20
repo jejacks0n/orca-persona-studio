@@ -52,5 +52,37 @@ declare module 'node:net' {
     listen(port: number, host: string, callback: () => void): unknown
     close(callback: () => void): unknown
   }
+  export function connect(port: number, host: string, callback: () => void): {
+    write(data: string): unknown
+    on(event: 'data', listener: (chunk: Uint8Array) => void): unknown
+    destroy(): unknown
+  }
+}
+declare module 'node:http' {
+  export interface IncomingMessage {
+    method?: string
+    url?: string
+    headers: Record<string, string | undefined>
+    destroy(): unknown
+    on(event: 'data', listener: (chunk: Uint8Array) => void): unknown
+    on(event: 'end' | 'close', listener: () => void): unknown
+  }
+  export interface ServerResponse {
+    writeHead(status: number, headers: Record<string, string>): unknown
+    write(chunk: string): unknown
+    end(chunk?: string): unknown
+    destroy(): unknown
+    on(event: 'close', listener: () => void): unknown
+  }
+  export interface Server {
+    listen(port: number, host: string, callback: () => void): unknown
+    close(callback: () => void): unknown
+    address(): { port: number } | string | null
+    on(event: 'error', listener: (err: { code?: string }) => void): unknown
+  }
+  export function createServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Server
+}
+declare module 'node:module' {
+  export function stripTypeScriptTypes(code: string): string
 }
 declare const process: { execPath: string; env: Record<string, string | undefined>; kill(pid: number, signal?: 0 | 'SIGTERM' | 'SIGKILL'): true }

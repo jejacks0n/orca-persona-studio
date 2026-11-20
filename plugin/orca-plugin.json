@@ -22,6 +22,7 @@
     ],
     "commands": [
       { "id": "open", "title": "Persona Studio: open the tab" },
+      { "id": "open-phone", "title": "Persona Studio: open on the phone" },
       { "id": "needs-you", "title": "Persona Studio: what needs me" }
     ],
     "events": [
@@ -33,7 +34,8 @@
       { "key": "orcaPath", "title": "Orca path", "description": "Where the orca command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
       { "key": "ghPath", "title": "GitHub CLI path", "description": "Where the gh command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
       { "key": "gitPath", "title": "Git path", "description": "Where the git command lives. Leave empty to find it automatically.", "type": "string", "default": "" },
-      { "key": "prPollMinutes", "title": "PR check interval", "description": "Minutes between checks on open pull requests.", "type": "integer", "default": 5, "minimum": 1 }
+      { "key": "prPollMinutes", "title": "PR check interval", "description": "Minutes between checks on open pull requests.", "type": "integer", "default": 5, "minimum": 1 },
+      { "key": "webPort", "title": "Phone page port", "description": "The port of the page Orca's phone app opens: http://localhost:<port>.", "type": "integer", "default": 4747, "minimum": 1024, "maximum": 65535 }
     ]
   },
   "capabilities": [

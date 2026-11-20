@@ -87,6 +87,16 @@ declare module 'orca' {
     'run.start': { input: { project: string; persona: string; focus?: string }; output: { ok: true } }
     'run.stop': { input: { project: string; persona: string }; output: { ok: true } }
     'run.watch': { input: { project: string; persona: string }; output: { ok: true } }
+    /** Stored projects whose checkout exists, less QA worktrees, in stored order. */
+    'projects.list': { output: { projects: { id: string; name: string }[] } }
+    /** The tab's place for the project, at storage key `place:<project>`. */
+    'place.get': { input: { project: string }; output: { place: Record<string, unknown> | null } }
+    'place.set': { input: { project: string; place: Record<string, unknown> }; output: { ok: true } }
+    /** `run.start` for each idle persona; `said` is the refusals' messages, joined with a space. */
+    'run.idle': { input: { project: string }; output: { said: string } }
+    /** The persona's file and its time; a write is refused when the file's time isn't `base`. */
+    'persona.read': { input: { project: string; persona: string }; output: { text: string; mtime: number } }
+    'persona.write': { input: { project: string; persona: string; text: string; base: number }; output: { mtime: number } }
     'persona.get': { input: { project: string; persona: string }; output: PersonaDetail }
     /** Open the persona's file in Orca's editor. */
     'persona.open': { input: { project: string; persona: string }; output: { ok: true } }

@@ -1,15 +1,31 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { JsonValue } from 'orca'
 import { afterEach, assert, mockHost, mountWorker, test, type MockHost, type TestWorker } from 'orca/testing'
+import type { OrcaWorkerApi } from 'orca/worker'
+import { focusWords } from './protocol'
 import type { Finding, ProjectFindings, Report } from './model'
 import { fixture, read, until } from './test-helpers'
 import type { Runner } from './tools'
+import { startWeb } from './web-server'
+import { NO_START } from './runs'
 import * as worker from './worker'
 
 const cleanup: (() => unknown)[] = []
-afterEach(async () => { for (const f of cleanup.splice(0)) await f() })
+/** The phone page's server, faked so no test binds a port: its routes, what it broadcast, and the port it was asked for. */
+const web = { handlers: new Map<string, (input: unknown) => Promise<unknown>>(), broadcasts: [] as [string, unknown][], ports: [] as number[], closed: [] as number[] }
+function fakeWeb(error?: string): void {
+  web.broadcasts = []; web.ports = []; web.closed = []
+  worker.setWebStarter((opts) => {
+    web.handlers = opts.handlers
+    web.ports.push(opts.port)
+    if (error) { opts.onError({ code: error }); opts.onError({ code: error }) }
+    return { broadcast: (e, p) => { web.broadcasts.push([e, p]) }, close: async () => { web.closed.push(opts.port) }, port: () => 0 }
+  })
+}
+fakeWeb()
+afterEach(async () => { for (const f of cleanup.splice(0)) await f(); fakeWeb() })
 
 /** A temp copy of fixtures/project: personas Maya and Dex in docs/qa/personas. */
 function copy(): string {
@@ -355,6 +371,16 @@ test('the open command opens the tab for the focused project, or says why there 
   await w.emit('workspace.changed', focused('app', 'main'))
   assert.equal(await w.command('open'), 'Opened the Persona Studio tab.')
   assert.deepEqual(host.callsOf('editor.open'), [{ workspaceId: 'main', path: 'persona.studio' }])
+})
+
+test('open on the phone opens a browser tab at the page in the focused worktree', async () => {
+  const calls: string[][] = []
+  const { dir, w } = await seeded([], { runner: fakeRunner(calls) })
+  assert.equal(await w.command('open-phone'), focusWords({ kind: 'none' }))
+  await w.emit('workspace.changed', focused('app', 'main'))
+  calls.length = 0
+  assert.equal(await w.command('open-phone'), "Opened the phone page in a browser tab. Open it from that tab in Orca's phone app.")
+  assert.deepEqual(calls.filter((a) => a[0] === 'tab'), [['tab', 'create', '--url', 'http://localhost:4747', '--worktree', `path:${dir}`, '--json']])
 })
 
 test('needs-you counts New, Kept, Working and Fixed for the focused project, or says nothing is waiting', async () => {
@@ -891,4 +917,151 @@ test('overview.get with a broken persona.studio says why, and logs it once', asy
   assert.deepEqual(o.personas, [])
   await w.request('overview.get', { project: 'app' })
   assert.equal(w.logs.filter((l) => /"port" must be a number/.test(l)).length, 1)
+})
+
+test('every request is also a web route, and posts reach the event stream', async () => {
+  const { w } = await seeded([finding('f1')])
+  assert.deepEqual(web.ports, [4747])
+  const viaWeb = await web.handlers.get('overview.get')!({ project: 'app' })
+  assert.deepEqual(viaWeb, JSON.parse(JSON.stringify(await w.request('overview.get', { project: 'app' }))))
+  await w.request('finding.act', { project: 'app', action: { type: 'keep', ids: ['f1'] } })
+  assert.deepEqual(web.broadcasts, [['changed', { project: 'app' }]])
+})
+
+test('a taken port shows one notification and the rest still works', async () => {
+  fakeWeb('EADDRINUSE')
+  const { host, w } = await seeded([finding('f1')])
+  assert.deepEqual(host.callsOf('notifications.show'), [{ title: "The phone page couldn't start",
+    body: "Port 4747 is in use. Change it in Persona Studio's settings." }])
+  assert.equal((await w.request('overview.get', { project: 'app' })).counts.new, 1)
+})
+
+/** Mounts the worker and keeps the orca it was given, so a test can change a setting as the owner does in Settings. */
+async function mountKeeping(host: MockHost): Promise<{ w: TestWorker; orca: OrcaWorkerApi }> {
+  let orca!: OrcaWorkerApi
+  const w = await mountWorker({ ...worker, default: (o: OrcaWorkerApi) => { orca = o; return worker.default(o) } }, { host })
+  cleanup.push(() => w.deactivate())
+  return { w, orca }
+}
+const settle = () => new Promise((r) => setTimeout(r, 50))
+
+test('a changed phone page port restarts the page on it, once the old one closed; the same port does not', async () => {
+  const { w, orca } = await mountKeeping(hostFor(copy()))
+  assert.deepEqual(web.ports, [4747])
+  await orca.settings.set('webPort', 4801)
+  await until(() => web.ports.length === 2, 'the page to restart')
+  assert.deepEqual(web.ports, [4747, 4801])
+  assert.deepEqual(web.closed, [4747])
+  await orca.settings.set('webPort', 4801)
+  await orca.settings.set('agent', 'codex')
+  await settle()
+  assert.deepEqual(web.ports, [4747, 4801])
+  await w.deactivate()
+  assert.deepEqual(web.closed, [4747, 4801])
+  // Deactivated, it no longer hears the setting.
+  await orca.settings.set('webPort', 4802)
+  await settle()
+  assert.deepEqual(web.ports, [4747, 4801])
+})
+
+test('a port still taken after a change tells the owner again, naming the new port', async () => {
+  fakeWeb('EADDRINUSE')
+  const { w: { host }, orca } = await mountKeeping(hostFor(copy()))
+  await orca.settings.set('webPort', 4801)
+  await until(() => host.callsOf('notifications.show').length === 2, 'the second notification')
+  assert.deepEqual(host.callsOf('notifications.show').map((c) => (c as { body: string }).body),
+    ["Port 4747 is in use. Change it in Persona Studio's settings.", "Port 4801 is in use. Change it in Persona Studio's settings."])
+})
+
+test('a second activate closes the first one\'s page and only it hears the setting', async () => {
+  const first = await mountKeeping(hostFor(copy()))
+  const second = await mountKeeping(hostFor(copy()))
+  assert.deepEqual(web.ports, [4747, 4747])
+  assert.deepEqual(web.closed, [4747])
+  await first.orca.settings.set('webPort', 4801)
+  await settle()
+  assert.deepEqual(web.ports, [4747, 4747])
+  await second.orca.settings.set('webPort', 4802)
+  await until(() => web.ports.length === 3, 'the page to restart')
+  assert.deepEqual(web.ports, [4747, 4747, 4802])
+})
+
+test('open on the phone uses the port setting', async () => {
+  const calls: string[][] = []
+  const { dir, w } = await seeded([], { runner: fakeRunner(calls), settings: { webPort: 4801 } as never })
+  await w.emit('workspace.changed', focused('app', 'main'))
+  calls.length = 0
+  await w.command('open-phone')
+  assert.deepEqual(calls.filter((a) => a[0] === 'tab'), [['tab', 'create', '--url', 'http://localhost:4801', '--worktree', `path:${dir}`, '--json']])
+})
+
+test('open on the phone with the port taken says so and opens no tab', async () => {
+  fakeWeb('EADDRINUSE')
+  const calls: string[][] = []
+  const { w } = await seeded([], { runner: fakeRunner(calls) })
+  await w.emit('workspace.changed', focused('app', 'main'))
+  calls.length = 0
+  assert.equal(await w.command('open-phone'), "Port 4747 is in use. Change it in Persona Studio's settings.")
+  assert.deepEqual(calls.filter((a) => a[0] === 'tab'), [])
+})
+
+test('deactivate closes the web server', async () => {
+  let server!: ReturnType<typeof startWeb>
+  worker.setWebStarter((o) => (server = startWeb(o)))
+  const { w } = await seeded([], { settings: { webPort: 0 } as never })
+  await until(() => server.port() > 0, 'the server to listen')
+  const port = server.port()
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/nothing`, { method: 'POST', headers: { 'x-persona-studio': '1' }, body: '{}' })).status, 404)
+  await w.deactivate()
+  await assert.rejects(fetch(`http://127.0.0.1:${port}/`))
+})
+
+test('projects.list leaves out QA worktrees and missing checkouts', async () => {
+  const dir = copy()
+  const w = await mount(hostFor(dir, { projects: [
+    { id: 'app', name: 'app', path: dir, branch: 'main' }, { id: 'qa', name: 'qa', path: dir, branch: 'studio/qa-maya' },
+    { id: 'gone', name: 'gone', path: join(dir, 'nowhere'), branch: 'main' }, { id: 'two', name: 'Two', path: dir, branch: 'dev' }] }))
+  assert.deepEqual(await w.request('projects.list'), { projects: [{ id: 'app', name: 'app' }, { id: 'two', name: 'Two' }] })
+})
+
+test('place.set then place.get round-trips under place:<project>, and the storage key is exactly place:app', async () => {
+  const { host, w } = await seeded()
+  assert.deepEqual(await w.request('place.get', { project: 'app' }), { place: null })
+  const place = { tab: 'findings', state: 'kept', open: ['f1'] }
+  assert.deepEqual(await w.request('place.set', { project: 'app', place }), { ok: true })
+  assert.deepEqual(host.data().storage['place:app'], place)
+  assert.deepEqual(await w.request('place.get', { project: 'app' }), { place })
+  await assert.rejects(web.handlers.get('place.set')!({ project: 'app', place: [1] }), (e: any) => e.code === 'invalid_params')
+  await assert.rejects(web.handlers.get('place.set')!({ project: 5, place }), (e: any) => e.code === 'invalid_params')
+  await assert.rejects(web.handlers.get('place.get')!({ project: 5 }), (e: any) => e.code === 'invalid_params')
+})
+
+test('run.idle says what each idle persona refused, joined with a space', async () => {
+  const { dir, w } = await seeded()
+  // No start command and no run prompt: every start is refused.
+  writeFileSync(join(dir, 'persona.studio'), JSON.stringify({ personas: 'docs/qa/personas' }))
+  const { said } = await w.request('run.idle', { project: 'app' })
+  assert.equal(said, `${NO_START} ${NO_START}`)
+})
+
+test('persona.read gives the file and its mtime; persona.write saves, and refuses a changed file or an unknown persona', async () => {
+  const { dir, w } = await seeded()
+  const file = join(dir, 'docs/qa/personas/dex.md')
+  const { text, mtime } = await w.request('persona.read', { project: 'app', persona: 'dex' })
+  assert.equal(text, read(file))
+  assert.equal(mtime, statSync(file).mtimeMs)
+  const saved = await w.request('persona.write', { project: 'app', persona: 'dex', text: `${text}\nMore.\n`, base: mtime })
+  assert.equal(read(file), `${text}\nMore.\n`)
+  assert.equal(saved.mtime, statSync(file).mtimeMs)
+  assert.deepEqual(web.broadcasts, [['changed', { project: 'app' }]])
+  // The file changed since it was opened: the old base is refused, and nothing is written.
+  utimesSync(file, Date.now() / 1000 + 5, Date.now() / 1000 + 5)
+  await assert.rejects(w.request('persona.write', { project: 'app', persona: 'dex', text: 'x', base: saved.mtime }),
+    (e: any) => e.code === 'invalid_params' && e.message === 'The persona file changed since you opened it.')
+  assert.equal(read(file), `${text}\nMore.\n`)
+  for (const call of [() => w.request('persona.read', { project: 'app', persona: 'zed' }),
+    () => w.request('persona.write', { project: 'app', persona: 'zed', text: 'x', base: 0 })]) {
+    await assert.rejects(call(), (e: any) => e.code === 'invalid_params' && e.message === `There's no persona "zed" in app.`)
+  }
+  await assert.rejects(web.handlers.get('persona.write')!({ project: 'app', persona: 'dex', text: 5, base: 0 }), (e: any) => e.code === 'invalid_params')
 })

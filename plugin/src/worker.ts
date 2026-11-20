@@ -25,6 +25,10 @@ import { progressLines, promptFile } from './tasks'
 import { NO_GH, makeTools, nodeRunner, type Runner, type Tools } from './tools'
 import type { Project } from './types'
 import { NAME, slugOf, watchWork, type Seen } from './work'
+import { startWeb, type Handler, type WebResponse } from './web-server'
+import { webFiles } from './web-files'
+import { STYLES } from './app-styles'
+import { fileURLToPath } from 'node:url'
 
 let runner: Runner = nodeRunner
 /** Tests swap in a fake so no real orca, gh or git runs. */
@@ -36,6 +40,15 @@ let now = () => Date.now()
 /** Tests move time for the runs. */
 export function setNow(fn: () => number): void { now = fn }
 let timer: ReturnType<typeof setInterval> | undefined
+let startWebServer: typeof startWeb = startWeb
+/** Tests swap in a fake so no socket opens and the handlers and broadcasts can be read. */
+export function setWebStarter(fn: typeof startWeb): void { startWebServer = fn }
+/** The phone page's server, the port it was asked for, and whether that port was taken; like `timer`, one per module. */
+let web: { server: ReturnType<typeof startWeb>; port: number; down: boolean } | undefined
+/** Starts and closes of the phone page, one at a time, so a port is free before the next server asks for it. */
+let webTurn: Promise<void> = Promise.resolve()
+/** The current activate's ear on its settings, so a second activate or a deactivate stops the first's. */
+let settingsHeard: { dispose(): void } | undefined
 /** Where each project's finding files (briefs, notes) live: outside its checkout, so a project only ever gets persona.studio.
  *  ponytail: a fixed folder in the home directory; Orca giving plugins a files folder would be the upgrade. */
 let filesRoot = join(homedir(), '.persona-studio')
@@ -45,12 +58,16 @@ const filesOf = (p: { id: string }) => join(filesRoot, p.id)
 
 const ok = { ok: true } as const
 
-export default function activate(orca: OrcaWorkerApi): void {
+export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   const { host, storage } = orca
   // Orca refuses an answer holding `undefined` (an optional field left unset, say), so every answer goes out as plain JSON.
   const plain = (x: unknown) => (x === undefined ? x : JSON.parse(JSON.stringify(x)))
-  const handle = ((name: string, fn: (input: never, context: never) => unknown) =>
-    orca.panels.handle(name, async (input, context) => plain(await fn(input as never, context as never)))) as typeof orca.panels.handle
+  /** Every request is also a route of the phone page's server. */
+  const routes = new Map<string, Handler>()
+  const handle = ((name: string, fn: (input: never, context: never) => unknown) => {
+    routes.set(name, async (input) => plain(await fn(input as never, {} as never)))
+    return orca.panels.handle(name, async (input, context) => plain(await fn(input as never, context as never)))
+  }) as typeof orca.panels.handle
   // Every change (requests, ticks, focus) runs one at a time, so two never interleave on a project's findings.
   let chain: Promise<unknown> = Promise.resolve()
   const serial = <T>(fn: () => Promise<T>): Promise<T> => {
@@ -73,6 +90,7 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   function post<K extends keyof PluginPanelEvents>(event: K, payload: PluginPanelEvents[K]) {
     try { orca.panels.post(event, payload) } catch (err) { orca.log(`studio: telling the panels: ${say(err)}`) }
+    try { web?.server.broadcast(event, payload) } catch (err) { orca.log(`studio: telling the phone page: ${say(err)}`) }
   }
 
   async function projectOf(id: string): Promise<Project> {
@@ -345,12 +363,54 @@ export default function activate(orca: OrcaWorkerApi): void {
       branch: run?.qa?.branch ?? null, port: run?.port ?? null, who: file.who, goals }
   }))
 
+  /** The persona's file, as persona.open finds it. */
+  async function sheetFile(project: string, persona: string): Promise<string> {
+    const p = await projectOf(project), s = sheetsOf(p).find((x) => x.id === persona)
+    if (!s) throw invalid(`There's no persona "${persona}" in ${p.name}.`)
+    return s.sheetPath
+  }
+  handle('persona.read', async ({ project, persona }) => {
+    const file = await sheetFile(project, persona)
+    return { text: readFileSync(file, 'utf8'), mtime: statSync(file).mtimeMs }
+  })
+  handle('persona.write', async ({ project, persona, text, base }) => {
+    if (typeof text !== 'string' || typeof base !== 'number') throw invalid('A persona file needs its text and the time it was opened.')
+    const file = await sheetFile(project, persona)
+    if (statSync(file).mtimeMs !== base) throw invalid('The persona file changed since you opened it.')
+    writeFileSync(file, text)
+    post('changed', { project })
+    return { mtime: statSync(file).mtimeMs }
+  })
+
+  // The tab keeps the same key (orca.storage.set), so a place set on the phone is the one the tab sees.
+  handle('place.get', async ({ project }) => {
+    if (typeof project !== 'string') throw invalid('Say which project.')
+    const place = await storage.get(`place:${project}`)
+    return { place: typeof place === 'object' && place !== null && !Array.isArray(place) ? place : null }
+  })
+  handle('place.set', async ({ project, place }) => {
+    if (typeof project !== 'string' || typeof place !== 'object' || place === null || Array.isArray(place)) throw invalid('A place is an object, for a project.')
+    await storage.set(`place:${project}`, place as never)
+    return ok
+  })
+  /** Checkouts that exist (existsSync, or the fake `setExists` swaps in), less each persona's QA worktree, in stored order. */
+  handle('projects.list', async () => ({ projects: (await loadProjects(storage))
+    .filter((p) => exists(p.path) && !p.branch.startsWith('studio/qa-')).map((p) => ({ id: p.id, name: p.name })) }))
+
   handle('persona.open', async ({ project, persona }) => {
     const p = await projectOf(project), s = sheetsOf(p).find((x) => x.id === persona)
     if (!s) throw invalid(`There's no persona "${persona}" in ${p.name}.`)
     return openFile(s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
   })
   handle('run.start', async ({ project, persona, focus }) => { await runs.start(await projectOf(project), persona, focus); return ok })
+  handle('run.idle', async ({ project }) => {
+    const p = await projectOf(project), pf = await serial(() => findingsOf(p)), said: string[] = []
+    for (const s of sheetsOf(p)) {
+      if ((await rowOf(p, s, pf)).state !== 'idle') continue
+      try { await runs.start(p, s.id) } catch (err) { said.push(say(err)) }
+    }
+    return { said: said.join(' ') }
+  })
   handle('run.stop', async ({ project, persona }) => { await runs.stop(await projectOf(project), persona); return ok })
   // ponytail: Orca can't focus one chat tab, only show its workspace; the tab says which chat to look at.
   handle('run.watch', async ({ project, persona }) => {
@@ -648,6 +708,25 @@ export default function activate(orca: OrcaWorkerApi): void {
     return { canvas: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v : null }
   })
 
+  const webPort = async () => {
+    const setting = (await orca.settings.get()).webPort
+    return typeof setting === 'number' ? setting : 4747
+  }
+  const inUse = (port: number) => `Port ${port} is in use. Change it in Persona Studio's settings.`
+
+  orca.commands.register('open-phone', async () => {
+    try {
+      const f = await focusNow()
+      if (f.kind !== 'project') return focusWords(f)
+      if (web?.down) return inUse(web.port)
+      // The focus's checkout is the worktree Orca has focused; the project's stored path is only where it first saw the project.
+      await (await env()).tools.openBrowserTab(`http://localhost:${await webPort()}`, f.path ?? (await projectOf(f.id)).path)
+      return "Opened the phone page in a browser tab. Open it from that tab in Orca's phone app."
+    } catch (err) {
+      return say(err)
+    }
+  })
+
   orca.commands.register('open', async () => {
     try {
       const f = await focusNow()
@@ -681,9 +760,48 @@ export default function activate(orca: OrcaWorkerApi): void {
   }, 15_000)
   // A run Orca's reload interrupted while preparing, or whose app died with the old worker, fails in plain words.
   void serial(() => runs.recover()).catch((err) => orca.log(`studio: picking runs back up: ${say(err)}`))
+
+  /** Starts the phone page on the port setting, once the server before it (a second activate's, or the old port's) has closed.
+   *  `ifMoved`: only when the setting no longer matches the running server. A failure to listen costs only the page. */
+  const startPage = (ifMoved = false) => (webTurn = webTurn.then(async () => {
+    try {
+      const port = await webPort()
+      if (ifMoved && web?.port === port) return
+      await closePage()
+      let file: (path: string) => WebResponse | null = () => null
+      try { file = webFiles(fileURLToPath(new URL('.', import.meta.url)), STYLES) } catch (err) { orca.log(`studio: the phone page has no files to serve: ${say(err)}`) }
+      const page = { port, down: false }
+      const server = startWebServer({ port, handlers: routes, file, onError: (err) => {
+        if (page.down) return
+        page.down = true
+        orca.log(`studio: the phone page couldn't start on ${port}: ${err.code}`)
+        void host.call('notifications.show', { title: "The phone page couldn't start", body: inUse(port) })
+          .catch((e) => orca.log(`studio: telling the owner: ${say(e)}`))
+      } })
+      web = Object.assign(page, { server })
+    } catch (err) {
+      orca.log(`studio: the phone page didn't start: ${say(err)}`)
+    }
+  }))
+  settingsHeard?.dispose()
+  // Any change re-reads the port setting; only a moved port restarts the page.
+  settingsHeard = orca.settings.onDidChange(() => { void startPage(true) })
+  await startPage()
 }
 
-export function deactivate(): void {
+/** Closes the current phone page server, if there is one. */
+async function closePage(): Promise<void> {
+  const closing = web
+  web = undefined
+  await closing?.server.close()
+}
+
+export async function deactivate(): Promise<void> {
   clearInterval(timer)
   timer = undefined
+  settingsHeard?.dispose()
+  settingsHeard = undefined
+  const closed = webTurn.then(closePage)
+  webTurn = closed.catch(() => {})
+  await closed
 }

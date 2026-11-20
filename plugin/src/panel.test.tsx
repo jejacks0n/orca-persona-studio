@@ -243,15 +243,12 @@ test('a running row shows its line and Stop, which requests run.stop; Run and Ru
   clean(p)
 })
 
-test('Run all idle starts each idle persona; a refusal shows and the rest still start', async () => {
-  const started: string[] = []
-  const { host } = boot(project, running, { 'run.start': (i: { persona: string }) => {
-    started.push(i.persona)
-    if (i.persona === 'maya') throw new Error('Maya cannot run.')
-    return { ok: true } } })
+test('Run all idle asks run.idle once and shows what it said', async () => {
+  const asked: unknown[] = []
+  const { host } = boot(project, running, { 'run.idle': (i: unknown) => { asked.push(i); return { said: 'Maya cannot run.' } } })
   const p = await mount(panel, { host })
   await p.press({ type: 'Button', text: 'Run all idle' })
-  assert.deepEqual(started, ['maya', 'lea', 'walt'])
+  assert.deepEqual(asked, [{ project: 'app' }])
   assert.ok(p.find({ text: /Maya cannot run/ }))
 })
 

@@ -12,7 +12,7 @@ export interface Ui { tab: FindingState; persona: string | null; kind: Kind | 'a
   picked: string[]; view: 'list' | 'detail'; notice: { text: string; undo?: string } | null
   /** `opened`: a finding was opened from the list, so it shows instead of the chosen persona's pane (`personaDetail`). */
   opened: boolean; personaDetail: PersonaDetail | null
-  dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string }
+  dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string } | { type: 'persona'; persona: string; name: string; text: string; mtime: number }
   notes: { text: string; base: number; dirty: boolean } | null; problem: string }
 export const freshUi = (): Ui => ({ tab: 'new', persona: null, kind: 'all', q: '', open: null, picked: [], view: 'list',
   opened: false, personaDetail: null, notice: null, dialog: null, notes: null, problem: '' })
@@ -55,8 +55,8 @@ const filterOf = (ui: Ui): Omit<Filter, 'state'> =>
   ({ persona: ui.persona ?? undefined, kind: ui.kind === 'all' ? undefined : ui.kind, q: ui.q.trim() || undefined })
 
 /** The brand, the Personas list (a popover that filters by persona; the chosen one shows on its button, with a clear
- *  beside it), the search and the kinds. */
-export function header(o: Overview, ui: Ui): string {
+ *  beside it), the search and the kinds. With `phone`, the project picker too. */
+export function header(o: Overview, ui: Ui, phone?: { project: string; projects: { id: string; name: string }[] }): string {
   const on = o.personas.find((p) => p.id === ui.persona), chev = icon('down', 'chev')
   const pick = on ? '<div class="pick on">' + btn(avatar(on)
       + `${on.state === 'running' ? '<i class="dot"></i>' : ''}<span class="name">${esc(on.name)}</span>${chev}`,
@@ -69,9 +69,13 @@ export function header(o: Overview, ui: Ui): string {
       + `${p.fresh ? `<span class="badge">${p.fresh} new</span>` : ''}`
       + (p.state === 'running' ? `<span class="what live"><i class="dot"></i>${esc(statusOf(p))}</span>` : `<span class="what">${esc(p.tag)}</span>`),
     { 'data-do': 'persona', 'data-persona': p.id, 'aria-pressed': String(ui.persona === p.id) }, 'persona')).join('')
-  return `<header class="top"><div class="brand">${LOGO}Persona Studio</div>`
+  const runAll = o.canRun === null && o.personas.some((p) => p.state === 'idle') ? btn('Run all idle', { 'data-do': 'run-all' }, 'btn runall') : ''
+  const projects = phone ? btn(`<span>${esc(phone.projects.find((p) => p.id === phone.project)?.name ?? phone.project)}</span>`, { 'data-do': 'projects', popovertarget: 'projects' })
+    + `<div class="pop" id="projects" popover><div class="colhead">Projects</div>${phone.projects.map((p) => btn(esc(p.name),
+      { 'data-do': 'project', 'data-id': p.id, 'aria-current': p.id === phone.project ? 'true' : undefined }, 'persona')).join('')}</div>` : ''
+  return `<header class="top"><div class="brand">${LOGO}Persona Studio</div>${projects}`
     + pick
-    + `<div class="pop" id="personas" popover><div class="colhead">Personas</div>${people}</div>`
+    + `<div class="pop" id="personas" popover><div class="colhead">Personas</div>${people}${runAll}</div>`
     + `<label class="search">${icon('search')}<input type="search" data-field="q" value="${esc(ui.q)}" placeholder="Search findings" aria-label="Search findings">${ui.q ? btn('&times;', { 'data-do': 'clear-q', 'aria-label': 'Clear the search' }, 'clear') : ''}</label>`
     + `<div class="seg" role="group" aria-label="Kind">${KINDS.map(([k, label]) =>
       btn(esc(label), { 'data-do': 'kind', 'data-kind': k, 'aria-pressed': String(ui.kind === k) }, '')).join('')}</div></header>`
@@ -109,14 +113,14 @@ export function listPane(all: readonly Row[], o: Overview, ui: Ui): string {
 }
 
 /** One report: what its persona saw, the steps, and its screenshots as they load. */
-function reportHtml(r: ReportView, shots: Record<string, string | null>): string {
+function reportHtml(r: ReportView, shots: Record<string, string | null>, phone: boolean): string {
   const pics = r.shots.map((_, i) => {
     const key = `${r.id}:${i}`, d = { 'data-report': r.id, 'data-index': String(i) }, n = i + 1
     if (!(key in shots)) return `<div class="shot-wait"${attrs(d)} role="img" aria-label="Screenshot ${n}, loading"></div>`
     const url = shots[key]
     return isImage(url)
       ? btn(`<img src="${esc(url)}" alt="Screenshot ${n} from ${esc(r.personaName)}&#39;s run">`, { 'data-do': 'shot-zoom', ...d, 'aria-label': `Enlarge screenshot ${n}` }, 'shot')
-      : btn(`Open screenshot ${n}`, { 'data-do': 'shot-open', ...d }, 'linkish')
+      : phone ? `<p class="hint">Screenshot ${n} is too big to show here.</p>` : btn(`Open screenshot ${n}`, { 'data-do': 'shot-open', ...d }, 'linkish')
   }).join('')
   return `<h3>What ${esc(r.personaName)} saw</h3><p>${esc(r.saw)}</p>`
     + (r.steps.length ? `<h3>Steps to reproduce</h3><ol>${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : '')
@@ -126,7 +130,7 @@ function reportHtml(r: ReportView, shots: Record<string, string | null>): string
 const backbar = (always = false) => `<div class="backbar${always ? ' always' : ''}">${btn(`${icon('back')}Findings`, { 'data-do': 'back' }, 'btn small ghost')}</div>`
 
 /** The open finding: what it is, where its work stands, each report, the notes and history, and what can be done with it now. */
-export function detailPane(d: Detail | null, o: Overview, ui: Ui, shots: Record<string, string | null>): string {
+export function detailPane(d: Detail | null, o: Overview, ui: Ui, shots: Record<string, string | null>, phone = false): string {
   const back = backbar(!!ui.persona)
   if (!d) return `<section class="detail" aria-label="Finding">${back}<div class="empty"><b>No finding selected</b>Pick one from the list to read what the persona saw.</div></section>`
   const f = d.finding, pr = f.work?.pr, first = f.reports[0]?.personaName ?? 'The persona'
@@ -153,7 +157,7 @@ export function detailPane(d: Detail | null, o: Overview, ui: Ui, shots: Record<
     kept: discuss + btn(`${icon('branch')}Start work`, { 'data-do': 'start' }, 'btn primary') + (o.hasGh && !f.issue ? btn(`${icon('issue')}Make an issue`, { 'data-do': 'issue' }) : '') + close,
     progress: discuss, fixed: discuss + reopen, closed: discuss + reopen }
   return `<section class="detail" aria-label="Finding">${back}<div class="scroll"><div class="dbody"><div class="meta">${meta}</div><h2>${esc(f.title)}</h2>`
-    + `${reopened}${work}${fixed}${closed}${f.reports.map((r) => reportHtml(r, shots)).join('')}${members}${notes}${history}</div></div>`
+    + `${reopened}${work}${fixed}${closed}${f.reports.map((r) => reportHtml(r, shots, phone)).join('')}${members}${notes}${history}</div></div>`
     + (acts[f.state] ? `<div class="actions">${acts[f.state]}</div>` : '') + '</section>'
 }
 
@@ -229,11 +233,14 @@ export function dialog(ui: Ui, all: readonly Row[]): string {
         + radio('workHow', 'together', 'One worktree for all of them, with one agent', false)
         + `<div class="one-only">${text('Worktree and branch', 'workName', g.name)}</div>${text('Starts from', 'workBase', g.base)}${pr}${told(' one-only')}${foot('Start work')}`
       : `<h2 id="dlg-title">Start work</h2><p class="dim">Makes a worktree and opens its agent as a chat, already briefed.</p>${text('Worktree and branch', 'workName', g.name)}${text('Starts from', 'workBase', g.base)}${pr}${told('')}${foot('Start work')}`
+  } else if (g.type === 'persona') {
+    body = `<h2 id="dlg-title">${esc(g.name)}&#39;s persona file</h2>`
+      + `<label class="field"><span>Who they are, what they want</span><textarea data-field="personaText" rows="14" autofocus>${esc(g.text)}</textarea></label>${foot('Save')}`
   } else {
     body = `<h2 id="dlg-title">Screenshot</h2>${isImage(g.url) ? `<img class="big" src="${esc(g.url)}" alt="Screenshot from the run">` : ''}`
       + `<div class="dfoot">${btn('Done', { 'data-do': 'cancel', autofocus: '' }, 'btn primary')}</div>`
   }
-  return `<dialog id="dlg"${g.type === 'shot' ? ' class="wide"' : ''} closedby="any" aria-labelledby="dlg-title"><form method="dialog">${body}</form></dialog>`
+  return `<dialog id="dlg"${g.type === 'shot' ? ' class="wide"' : ''} closedby="${g.type === 'persona' ? 'closerequest' : 'any'}" aria-labelledby="dlg-title"><form method="dialog">${body}</form></dialog>`
 }
 
 /** The bar under the lists: the last thing that happened, with Undo when it can be undone. Empty (and hidden) with no notice. */

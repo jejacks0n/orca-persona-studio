@@ -93,9 +93,14 @@ One tab per project, opened from the sidebar or the command palette. The finding
 
 Pressing a persona shows its run, or when it last ran, its findings by list and its goals, with **Run** or **Watch the run** and **Stop**. Every finding has **Discuss**, which opens a chat about it, and a kept one also has **Start work**, which makes a worktree and opens an agent briefed from the finding and your notes.
 
+### Phone
+
+The tab is also a page on your Mac, so you can use it from Orca's phone app. Open `http://localhost:4747` in a browser tab there, or run **Persona Studio: open on the phone** on the Mac. It works over any connection the phone app has. If 4747 is taken, change **Phone page port** in the settings and open the new address.
+
 ### Commands
 
 - **Persona Studio: open the tab** opens the tab for the project you have open.
+- **Persona Studio: open on the phone** opens the phone page in a browser tab.
 - **Persona Studio: what needs me** says how many findings are waiting in each list.
 
 ## Development

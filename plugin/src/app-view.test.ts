@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing'
+import { rootClass } from './app-logic'
 import { detailPane, dialog, freshUi, header, listPane, noticeBar, personaPane, zeroPane, type Ui } from './app-view'
 import type { Row } from './findings-view'
 import type { FindingState } from './model'
@@ -438,4 +439,60 @@ test('the zero state says why personas help, how setup goes, and offers Set up p
   const pitch = h.slice(0, h.indexOf('<details'))
   assert.ok(!/start command|prepare|persona\.studio/i.test(pitch))
   assert.ok(h.includes('<details class="part"><summary>') && h.includes('data-url="https://github.com/jejacks0n/orca-persona-studio/blob/main/plugin/CONTRACT.md"'))
+})
+
+test('with phone, the header has the project button and list, current marked', () => {
+  const projects = [{ id: 'p1', name: 'phosphor' }, { id: 'p2', name: 'studio-sample' }]
+  const html = header(overview(), ui(), { project: 'p2', projects })
+  const b = buttons(html)
+  const go = b.find((x) => x.attrs['data-do'] === 'projects')!
+  assert.equal(go.label, 'studio-sample')
+  assert.equal(go.attrs.popovertarget, 'projects')
+  assert.deepEqual(b.filter((x) => x.attrs['data-do'] === 'project').map((x) => [x.attrs['data-id'], x.attrs['aria-current']]), [['p1', undefined], ['p2', 'true']])
+  assert.ok(html.includes('id="projects"'))
+  assert.ok(!header(overview(), ui()).includes('data-do="projects"'))
+  assert.ok(!html.includes('<select'))
+})
+
+test("the Personas list ends with Run all idle, unless none is idle or runs can't start", () => {
+  const runAll = (o: Overview) => button(header(o, ui()), 'Run all idle')
+  assert.equal(runAll(overview())!.attrs['data-do'], 'run-all')
+  const html = header(overview(), ui())
+  assert.ok(html.indexOf('data-do="run-all"') > html.indexOf('data-persona="dex"'))
+  const busy = overview().personas.map((p) => ({ ...p, state: 'running' as const }))
+  assert.equal(runAll(overview({ personas: busy })), undefined)
+  assert.equal(runAll(overview({ canRun: 'No Claude found.' })), undefined)
+})
+
+test('the persona file dialog has the text, Cancel and Save', () => {
+  const html = dialog(ui({ dialog: { type: 'persona', persona: 'dex', name: 'Dex', text: 'Dex <b>is</b>', mtime: 5 } }), [])
+  assert.ok(words(html).includes("Dex's persona file") || words(html).includes('Dex&#39;s persona file'))
+  assert.ok(/<textarea[^>]*data-field="personaText"[^>]*>Dex &lt;b&gt;is&lt;\/b&gt;<\/textarea>/.test(html))
+  assert.ok(!html.includes('<b>is'))
+  assert.ok(html.includes('data-do="cancel"') && html.includes('value="ok"'))
+  assert.ok(words(html).includes('Save'))
+  // A tap on the backdrop doesn't throw the edit away; Escape still closes it. Every other dialog closes on any.
+  assert.ok(html.includes(' closedby="closerequest"') && !html.includes('closedby="any"'))
+  assert.ok(dialog(ui({ dialog: { type: 'close', ids: ['a'] } }), [row('a')]).includes(' closedby="any"'))
+  assert.ok(dialog(ui({ dialog: { type: 'shot', url: 'data:image/png;base64,AA' } }), []).includes(' closedby="any"'))
+})
+
+test("phone's root class is narrow and phone at any width", () => {
+  assert.equal(rootClass(ui(), 1000, true), 'app narrow phone v-list')
+  assert.equal(rootClass(ui({ view: 'detail' }), 300, true), 'app narrow phone v-detail')
+})
+
+test('on the phone a screenshot has no Open in Orca, only its full-size sheet', () => {
+  const d = detail('new', { reports: [report('r1', { shots: [{ id: 's' }] as never })] })
+  const shots = { 'r1:0': 'data:text/plain,x' }
+  const on = detailPane(d, overview(), ui(), shots, true)
+  assert.ok(!on.includes('shot-open'))
+  // One that can't be shown (over 700 KB, say) says so, numbered as the desktop's Open screenshot is.
+  const big = detailPane(detail('new', { reports: [report('r1', { shots: [{ id: 's' }, { id: 't' }] as never })] }), overview(), ui(),
+    { 'r1:0': 'data:image/png;base64,AA', 'r1:1': null }, true)
+  assert.ok(words(big).includes('Screenshot 2 is too big to show here.'))
+  assert.ok(!words(big).includes('Screenshot 1 is too big'))
+  assert.ok(detailPane(d, overview(), ui(), shots).includes('shot-open'))
+  const img = detailPane(d, overview(), ui(), { 'r1:0': 'data:image/png;base64,AA' }, true)
+  assert.ok(img.includes('shot-zoom') && !img.includes('shot-open'))
 })
