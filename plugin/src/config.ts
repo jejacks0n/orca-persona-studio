@@ -2,13 +2,15 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 
 export interface Config { personas: string; runsDir: string; resultsFile: string; setup: 'run' | 'skip' | 'inherit'; port: number
+  /** False: runs use the project's own checkout, as it is, instead of a worktree per persona; personas then take turns. */
+  worktrees: boolean
   repo?: string; start?: string; url: string; prepare: string[]; copy: string[]; runPrompt?: string; reviewPrompt?: string; builderBrief?: string }
 
 /** The project's config, committed at its root. It's also the file that opens the Persona Studio tab. */
 export const CONFIG_FILE = 'persona.studio'
 const PROMPTS = ['runPrompt', 'reviewPrompt', 'builderBrief'] as const
 
-const defaults: Config = { personas: 'docs/personas', runsDir: 'qa-runs', resultsFile: 'results.json', setup: 'run', port: 4210,
+const defaults: Config = { personas: 'docs/personas', runsDir: 'qa-runs', resultsFile: 'results.json', setup: 'run', port: 4210, worktrees: true,
   url: 'http://localhost:{port}', prepare: [], copy: [] }
 const setups = ['run', 'skip', 'inherit']
 const bad = (key: string, what: string) => new Error(`${CONFIG_FILE}: "${key}" must be ${what}`)
@@ -21,6 +23,11 @@ export function parseConfig(json: unknown): Config {
   const out: Record<string, unknown> = {}
   for (const [key, dflt] of Object.entries(defaults)) {
     const v = raw[key] ?? dflt
+    if (typeof dflt === 'boolean') {
+      if (typeof v !== 'boolean') throw bad(key, 'true or false')
+      out[key] = v
+      continue
+    }
     if (typeof dflt === 'number' ? typeof v !== 'number' || !Number.isFinite(v) : Array.isArray(dflt) ? !Array.isArray(v) || v.some((x) => typeof x !== 'string') : typeof v !== 'string' || v === '') {
       throw bad(key, typeof dflt === 'number' ? 'a number' : Array.isArray(dflt) ? 'a list of strings' : 'a string')
     }
@@ -34,6 +41,9 @@ export function parseConfig(json: unknown): Config {
   if (!setups.includes(out.setup as string)) throw new Error(`${CONFIG_FILE}: "setup" must be one of ${setups.join(', ')}`)
   return out as unknown as Config
 }
+
+/** Whether runs use the project's own checkout instead of a worktree per persona. */
+export const inPlace = (config: Config): boolean => !config.worktrees
 
 /** A prompt field's text. One line ending in .md is a file in the project, read now; anything else is the prompt itself. */
 export function promptOf(projectPath: string, key: typeof PROMPTS[number], value: string): string {

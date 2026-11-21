@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import type { JsonValue, PluginPanelEvents } from 'orca'
 import type { HostApi, StorageApi } from 'orca/host'
-import { listPersonas, promptOf, readConfig, type Config } from './config'
+import { inPlace, listPersonas, promptOf, readConfig, type Config } from './config'
 import { landRun, landedWords } from './land'
 import type { ActiveRun, PersonaRecord, ProjectFindings, RunTask } from './model'
 import { closedText, fill, goalsText, MATCH_PROMPT, recheckText, RUN_PROMPT } from './prompts'
@@ -272,23 +272,33 @@ export function makeRuns(c: RunCtx) {
       c.log(`studio: ${persona}'s run ${id} was stopped while it was being prepared; dropped what it started`)
     }
     try {
-      const config: Config = readConfig(p.path), tools = await c.tools()
-      const root = await tools.mainCheckout(p.path)
-      if (!root) throw new Error(`${p.path} isn't a git repository.`)
-      const slug = root === p.path ? `qa-${persona}` : `qa-${basename(p.path)}-${persona}`, branch = `studio/${slug}`
-      let ws = await findWorkspace(c.host, tools, branch, root, 1)
-      if (!ws) {
-        await tools.createWorktree({ projectPath: p.path, name: slug, branch, base: p.branch, setup: config.setup })
-        ws = await findWorkspace(c.host, tools, branch, root, 10)
-        if (!ws) throw new Error(`Orca made ${name}'s copy, ${branch}, but doesn't list it.`)
+      const config: Config = readConfig(p.path), tools = await c.tools(), here = inPlace(config)
+      let qa: NonNullable<ActiveRun['qa']>
+      if (here) {
+        // In the owner's own checkout, as it is: nothing is made, reset or copied there.
+        const ws = (await c.host.call('workspace.list')).workspaces.find((w) => w.path === p.path && (w.hostId ?? 'local') === 'local')
+        if (!ws) throw new Error(`No workspace in Orca is ${p.name}'s checkout (${p.path}).`)
+        qa = { path: p.path, branch: p.branch, workspaceId: ws.id }
+      } else {
+        const root = await tools.mainCheckout(p.path)
+        if (!root) throw new Error(`${p.path} isn't a git repository.`)
+        const slug = root === p.path ? `qa-${persona}` : `qa-${basename(p.path)}-${persona}`, branch = `studio/${slug}`
+        let ws = await findWorkspace(c.host, tools, branch, root, 1)
+        if (!ws) {
+          await tools.createWorktree({ projectPath: p.path, name: slug, branch, base: p.branch, setup: config.setup })
+          ws = await findWorkspace(c.host, tools, branch, root, 10)
+          if (!ws) throw new Error(`Orca made ${name}'s copy, ${branch}, but doesn't list it.`)
+        }
+        qa = { path: ws.path, branch, workspaceId: ws.id }
+        if (!(await still())) return await gone()
+        await tools.resetQa(qa.path, p.branch)
       }
-      const qa = { path: ws.path, branch, workspaceId: ws.id }
       if (!(await still())) return await gone()
-      await tools.resetQa(qa.path, p.branch)
       if (!config.runPrompt) {
-        const missing = copyInto(p.path, qa.path, config.copy)
+        const missing = here ? [] : copyInto(p.path, qa.path, config.copy)
         if (missing.length) c.log(`studio: ${persona}'s copy is missing ${missing.join(', ')}`)
-        for (const cmd of config.prepare) {
+        // The owner's own checkout is already prepared, and a prepare like `npm ci` would pull files out from under their work.
+        for (const cmd of here ? [] : config.prepare) {
           if (!(await still())) return await gone()
           const out = await c.runner('sh', ['-c', cmd], { cwd: qa.path, timeoutMs: 15 * 60_000 })
           if (out.code !== 0) throw new ToolError(cmd, out.stderr || out.stdout, out.code)
@@ -344,6 +354,7 @@ export function makeRuns(c: RunCtx) {
       if (!config.start && !config.runPrompt) throw invalid(NO_START)
       const runs = await active()
       const other = runs.find((x) => x.project === p.id)
+      if (other && inPlace(config)) throw invalid(`Runs use ${p.name}'s own checkout, so personas take turns. ${nameOf(p, other.persona)} is running.`)
       if (other && config.runPrompt && !promptOf(p.path, 'runPrompt', config.runPrompt).includes('{port}')) {
         throw invalid(`${p.name}'s run prompt doesn't use {port}, so its personas run one at a time. ${nameOf(p, other.persona)} is running.`)
       }

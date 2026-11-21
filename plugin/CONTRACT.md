@@ -39,6 +39,7 @@ Persona Studio reads files from your project. This page says which, and what sho
 | `builderBrief` | Your instructions for the agent that works on a finding: a file or the text itself. |
 | `runsDir` | Folder where each run keeps its output, relative to the workspace. |
 | `resultsFile` | The file name a run writes its results to, inside its run folder. |
+| `worktrees` | `false` runs each persona in the project's own checkout, as it is, instead of a worktree of its own: uncommitted changes are tested too, `copy` and `prepare` are skipped, and personas take turns. Defaults to `true`. |
 
 When there's no `runPrompt`, Persona Studio uses `start`, `prepare`, `copy`, `url` and `port` to start the app itself, and uses its own run prompt.
 
@@ -46,7 +47,7 @@ The setup chat (**Set up personas**) writes `start`, `prepare`, `copy` and, only
 
 A field with the wrong type is refused, and the message names the field. So is a prompt file that isn't there.
 
-Each Orca worktree is its own project, the main checkout included, and reads `persona.studio` from its own root. There's no base branch to set: the worktree's own branch is the one runs test (its last local commit; Run asks first when there are uncommitted changes), fixes are built from, and PRs go into.
+Each Orca worktree is its own project, the main checkout included, and reads `persona.studio` from its own root. There's no base branch to set: the worktree's own branch is the one runs test (its last local commit, and Run asks first when there are uncommitted changes; with `"worktrees": false`, the checkout as it is), fixes are built from, and PRs go into.
 
 ## Persona files
 
@@ -96,7 +97,7 @@ Persona Studio fills these placeholders, written in braces, before it hands the 
 | `{runDir}` | The folder this run writes into. |
 | `{doneFile}` | The path the agent writes its done file to when it finishes. |
 | `{url}` | The address of this run's copy of the app: `url` with `{port}` filled in. |
-| `{worktree}` | The root of the persona's QA worktree, where the run happens. |
+| `{worktree}` | Where the run happens: the root of the persona's QA worktree, or of the project's own checkout with `"worktrees": false`. |
 | `{resultsFile}` | The results file's name, from `resultsFile`. |
 | `{port}` | The port this run's copy of the app listens on. A run prompt that doesn't use it can't share the machine, so that project's personas run one at a time. |
 | `{recheck}` | The fixes to check again, one per line with the finding's id and title. |

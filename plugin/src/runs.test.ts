@@ -133,6 +133,25 @@ test('uncommitted changes hold a run back with how many files have them; anyway 
   await w.request('run.stop', { project: 'app', persona: 'maya' })
 })
 
+test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {
+  const { dir, host, w, calls, made } = await setup({ config: { worktrees: false, copy: ['.env'], prepare: ['echo prepared > prepared.txt'] }, status: ' M src/app.ts\n' })
+  writeFileSync(join(dir, '.env'), 'mine')
+  assert.deepEqual(await start(w), { ok: true, inPlace: true })
+  await using(host)
+  assert.deepEqual(runOf(host)!.qa, { path: dir, branch: 'main', workspaceId: 'main' })
+  assert.deepEqual(made, [])
+  assert.equal(calls.some((a) => a.includes('reset') || (a[0] === 'worktree' && a[1] === 'create') || a.includes('--porcelain')), false)
+  assert.equal(read(join(dir, '.env')), 'mine')
+  assert.equal(existsSync(join(dir, 'prepared.txt')), false, 'prepare is skipped')
+  assert.deepEqual(launches(calls)[0].slice(6, 8), ['--worktree', `path:${dir}`])
+  // The run chat writes its run folder in the checkout.
+  assert.ok(existsSync(join(dir, 'qa-runs', runOf(host)!.id)))
+  const p = await w.request('persona.get', { project: 'app', persona: 'maya' })
+  assert.equal(p.inPlace, true)
+  await assert.rejects(start(w, 'dex'), /Runs use app's own checkout, so personas take turns\. Maya is running\./)
+  await w.request('run.stop', { project: 'app', persona: 'maya' })
+})
+
 test('run.start makes the QA worktree, resets it, starts the app and launches the run chat', async () => {
   const { dir, files, host, w, calls, made } = await setup()
   assert.deepEqual(await start(w), { ok: true })

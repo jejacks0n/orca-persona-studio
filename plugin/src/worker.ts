@@ -6,7 +6,7 @@ import { homedir } from 'node:os'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import type { PluginPanelEvents } from 'orca'
 import type { OrcaWorkerApi } from 'orca/worker'
-import { CONFIG_FILE, listPersonas, parseConfig, portraitOf, promptOf, readConfig } from './config'
+import { CONFIG_FILE, inPlace, listPersonas, parseConfig, portraitOf, promptOf, readConfig } from './config'
 import { isMet, series } from './goals'
 import { act } from './finding'
 import { findingDir, mergeNotes, notesChangedSince, readNotes, writeBrief, writeNotes } from './finding-files'
@@ -342,7 +342,7 @@ export default function activate(orca: OrcaWorkerApi): void {
     const goals = file.goals.map((g) => ({ text: g.text, met: isMet(g, done),
       ...(g.measure && { trend: { text: g.text, target: g.measure.target, better: g.measure.better, unit: g.measure.metric, points: series(g, done) } }) }))
     return { row: await rowOf(p, s, pf), lines: (run && progressLines(filesOf(p), run.id)?.lines) || [],
-      branch: run?.qa?.branch ?? null, port: run?.port ?? null, who: file.who, goals }
+      branch: run?.qa?.branch ?? null, port: run?.port ?? null, ...(run?.qa?.path === p.path && { inPlace: true }), who: file.who, goals }
   }))
 
   handle('persona.open', async ({ project, persona }) => {
@@ -353,15 +353,18 @@ export default function activate(orca: OrcaWorkerApi): void {
     const here = f?.kind === 'project' && f.path ? join(f.path, relative(p.path, s.sheetPath)) : ''
     return openFile(here && existsSync(here) ? here : s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
   })
-  // A run tests the last commit, so uncommitted changes would silently miss it: say so first, unless told to run anyway.
+  // A run in its own copy tests the last commit, so uncommitted changes would silently miss it: say so first, unless told
+  // to run anyway. One in the project's own checkout tests them as they are. A config that doesn't load is runs.start's to refuse.
   handle('run.start', async ({ project, persona, focus, anyway }) => {
     const p = await projectOf(project)
-    if (!anyway) {
+    let here = false
+    try { here = inPlace(readConfig(p.path)) } catch { /* refused below */ }
+    if (!anyway && !here) {
       const uncommitted = await (await env()).tools.uncommitted(p.path)
       if (uncommitted > 0) return { uncommitted }
     }
     await runs.start(p, persona, focus)
-    return ok
+    return here ? { ok: true as const, inPlace: true as const } : ok
   })
   handle('run.stop', async ({ project, persona }) => { await runs.stop(await projectOf(project), persona); return ok })
   // ponytail: Orca can't focus one chat tab, only show its workspace; the tab says which chat to look at.

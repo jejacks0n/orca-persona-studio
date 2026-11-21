@@ -136,8 +136,9 @@ To split the work in two, add `reviewPrompt`: a second agent reads what the run 
 | `builderBrief` | | Your rules for the agent that works on a finding |
 | `repo` | the `origin` remote | GitHub repo, as `owner/name` |
 | `setup` | `run` | What a new worktree does first: `run`, `skip` or `inherit` |
-| `runsDir` | `qa-runs` | Where each run keeps its output, in the persona's copy |
+| `runsDir` | `qa-runs` | Where each run keeps its output, in the persona's copy, or your checkout |
 | `resultsFile` | `results.json` | The results file's name in a run folder |
+| `worktrees` | `true` | `false` runs personas in your own checkout, one at a time, instead of a worktree each |
 
 A prompt field holds a path to a `.md` file in your project, or the prompt itself. `persona.studio` is the one file Persona Studio adds to your project; its working files, such as each finding's brief and notes, live in `~/.persona-studio/<project>/`.
 
@@ -154,6 +155,8 @@ The **Persona Studio** panel follows the project you have open in Orca.
 - **Run all idle** starts every persona that isn't running, and **Open Studio** opens the tab.
 
 A run uses your branch's last commit. If you have uncommitted changes, Run says how many files have them and offers **Run anyway**.
+
+To test your checkout as it is instead, uncommitted changes and all, set `"worktrees": false` in `persona.studio`. Each run then works in your own checkout: no worktree is made, nothing is reset or copied, `prepare` is skipped (your checkout is already set up), and personas take turns. Run output lands in `runsDir` there, so add it to your `.gitignore`.
 
 ### The tab
 

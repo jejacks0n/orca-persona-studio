@@ -314,6 +314,8 @@ test('a running persona shows its copy, the stages with the current one on, and 
   const lines = ['one', 'two', 'three', 'four', 'five', '<b>six</b>']
   const html = personaPane(personDetail({ lines }, { state: 'running', stage: 'Writing up', runs: 1 }))
   assert.ok(words(html).includes('Running in its own copy · studio/qa-dex · port 4210'))
+  const here = personaPane(personDetail({ branch: 'main', inPlace: true }, { state: 'running', stage: 'Using the app', runs: 1 }))
+  assert.ok(words(here).includes('Running in your checkout · port 4210') && !words(here).includes('main'))
   assert.match(html, /<span class="done">Using the app<\/span><span class="on">Writing up<\/span><span class="">Matching<\/span>/)
   assert.ok(!html.includes('<li>one</li>') && html.includes('<li>two</li>') && html.includes('<li>&lt;b&gt;six&lt;/b&gt;</li>'))
   assert.ok(!html.includes('<b>six'))

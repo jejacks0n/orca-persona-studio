@@ -5,7 +5,7 @@ import { assert, test } from 'orca/testing'
 import { CONFIG_FILE, listPersonas, parseConfig, portraitOf, promptOf, readConfig } from './config'
 import { fixture, readJson } from './test-helpers'
 
-const defaults = { personas: 'docs/personas', runsDir: 'qa-runs', resultsFile: 'results.json', setup: 'run', port: 4210,
+const defaults = { personas: 'docs/personas', runsDir: 'qa-runs', resultsFile: 'results.json', setup: 'run', port: 4210, worktrees: true,
   url: 'http://localhost:{port}', prepare: [], copy: [] }
 
 test('no config at all gives the defaults, and nothing is required', () => {
@@ -18,6 +18,7 @@ test('a field of the wrong type is refused, naming the field', () => {
   assert.throws(() => parseConfig({ copy: [1] }), /"copy" must be a list/)
   assert.throws(() => parseConfig({ runsDir: 3 }), /"runsDir" must be a string/)
   assert.throws(() => parseConfig({ setup: 'sometimes' }), /setup/)
+  assert.throws(() => parseConfig({ worktrees: 'no' }), /"worktrees" must be true or false/)
   assert.throws(() => parseConfig('nope'), /persona\.studio/)
   assert.throws(() => parseConfig({ builderBrief: 3 }), /persona\.studio: "builderBrief" must be a non-empty string/)
 })
@@ -28,6 +29,7 @@ test('set fields override the defaults, and the three prompts are kept as writte
   assert.equal(c.port, 3000)
   assert.deepEqual(c.prepare, ['npm i'])
   assert.deepEqual([c.runPrompt, c.reviewPrompt, c.builderBrief], ['Use it.', 'r.md', 'x.md'])
+  assert.equal(parseConfig({ worktrees: false }).worktrees, false)
 })
 test('readConfig reads persona.studio at the root: missing or blank is the defaults, a broken one throws with its path', () => {
   const dir = mkdtempSync(join(tmpdir(), 'studio-config-'))

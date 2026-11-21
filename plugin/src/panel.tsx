@@ -77,7 +77,8 @@ async function runSome(project: string, ids: string[], name: 'run.start' | 'run.
     const out = await runCall(name, project, id, anyway)
     if (typeof out === 'number') { waiting.push(id); n = Math.max(n, out) } else if (out) said.push(out)
   }
-  set(problem, said.join(' '))
+  // Personas that take turns are each refused in the same words: those show once.
+  set(problem, [...new Set(said)].join(' '))
   if (waiting.length) set(held, { project, ids: waiting, n })
 }
 

@@ -51,6 +51,8 @@ export interface PersonaRow { id: string; name: string; tag: string; state: 'idl
 export interface Overview { personas: PersonaRow[]; counts: Record<FindingState, number>; hasGh: boolean; canRun: string | null; configError: string | null }
 /** One persona: its row, the run's last lines, QA branch and port while running, and every goal in its persona file. */
 export interface PersonaDetail { row: PersonaRow; lines: string[]; branch: string | null; port: number | null
+  /** The run is in the project's own checkout, not a copy of its own. */
+  inPlace?: true
   /** The persona file's `## Who`, a paragraph each. */
   who: string[]
   goals: { text: string; met: boolean; trend?: Trend }[] }
@@ -88,7 +90,7 @@ declare module 'orca' {
     'work.start': { input: { project: string; ids: string[]; name: string; base: string; each?: boolean; autoPr?: boolean }; output: { ok: true } }
     'tick': { output: { ok: true } }
     /** Without `anyway`, a checkout with uncommitted changes doesn't start: it answers how many files have them. */
-    'run.start': { input: { project: string; persona: string; focus?: string; anyway?: boolean }; output: { ok: true } | { uncommitted: number } }
+    'run.start': { input: { project: string; persona: string; focus?: string; anyway?: boolean }; output: { ok: true; inPlace?: true } | { uncommitted: number } }
     'run.stop': { input: { project: string; persona: string }; output: { ok: true } }
     'run.watch': { input: { project: string; persona: string }; output: { ok: true } }
     'persona.get': { input: { project: string; persona: string }; output: PersonaDetail }

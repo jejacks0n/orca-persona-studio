@@ -16,11 +16,11 @@ const ask = <K extends keyof PluginRequests>(name: K, input: PluginRequestInput<
   ({ request: { name, input } as Request, ...(then && { then: then as (ui: Ui, out: unknown) => Ui }) })
 const change = (f: (ui: Ui) => Ui): Act => ({ ui: f })
 const say = (text: string, undo?: string | null) => (ui: Ui): Ui => ({ ...ui, notice: undo ? { text, undo } : { text } })
-const started = (name: string) => say(`${name} is running in its own copy. Carry on with the others.`)
+const started = (name: string, inPlace = false) => say(inPlace ? `${name} is running in your checkout.` : `${name} is running in its own copy. Carry on with the others.`)
 /** Start a run; uncommitted changes hold it back, and the notice offers Run anyway. */
 const startRun = (project: string, again: RunAgain, anyway = false): Act =>
   ask('run.start', { project, persona: again.persona, ...(again.focus && { focus: again.focus }), ...(anyway && { anyway }) },
-    (u, out) => ('uncommitted' in out ? { ...u, notice: { text: uncommittedWords(out.uncommitted), anyway: again } } : started(again.name)(u)))
+    (u, out) => ('uncommitted' in out ? { ...u, notice: { text: uncommittedWords(out.uncommitted), anyway: again } } : started(again.name, out.inPlace === true)(u)))
 const KINDS: readonly string[] = ['all', 'bug', 'missing', 'polish']
 const toggle = (list: readonly string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
 const counted = (word: string, n: number) => (n > 1 ? `${word} ${n}` : word)

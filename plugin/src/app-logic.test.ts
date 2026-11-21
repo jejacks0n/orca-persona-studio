@@ -264,6 +264,7 @@ test('the run dialog sends run.start with the trimmed focus, and leaves it out w
   const a = request(act({ do: 'submit' }, u, { focus: '  the export  ' }))
   assert.deepEqual(a.request, { name: 'run.start', input: { project: 'p1', persona: 'dex', focus: 'the export' } })
   assert.equal(a.then!(u, { ok: true }).notice?.text, 'Dex is running in its own copy. Carry on with the others.')
+  assert.equal(a.then!(u, { ok: true, inPlace: true }).notice?.text, 'Dex is running in your checkout.')
   assert.deepEqual(request(act({ do: 'submit' }, u, { focus: '   ' })).request.input, { project: 'p1', persona: 'dex' })
 })
 

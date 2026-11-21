@@ -172,7 +172,7 @@ export function personaPane(d: PersonaDetail | null, rows: readonly Row[] = []):
   const p = d.row, n = counts(rows, { persona: p.id }), running = p.state === 'running'
   const stage = STAGES.findIndex((s) => p.stage?.startsWith(s))
   const card = running
-    ? `<div class="card"><div class="line"><i class="dot"></i><b>Running</b>${span(['in its own copy', d.branch, d.port !== null && `port ${d.port}`].filter(Boolean).join(' · '), 'dim')}</div>`
+    ? `<div class="card"><div class="line"><i class="dot"></i><b>Running</b>${span([d.inPlace ? 'in your checkout' : 'in its own copy', !d.inPlace && d.branch, d.port !== null && `port ${d.port}`].filter(Boolean).join(' · '), 'dim')}</div>`
       + `<div class="stages">${STAGES.map((s, i) => `<span class="${i === stage ? 'on' : i < stage ? 'done' : ''}">${s}</span>`).join('')}</div>`
       + `<ul class="log">${d.lines.slice(-5).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`
     : p.error !== undefined ? `<div class="card bad"><div class="line"><b>The last run failed</b></div><p class="why">${esc(p.error)}</p></div>`
