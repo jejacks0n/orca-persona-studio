@@ -1,6 +1,6 @@
 {
   "manifestVersion": 2,
-  "id": "studio",
+  "id": "persona-studio",
   "name": "Persona Studio",
   "version": "0.1.0",
   "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
