@@ -9,7 +9,8 @@ import type { Trend } from './trends-draw'
 export type Focus = { kind: 'none' } | { kind: 'notGit'; name: string } | { kind: 'project'; id: string; name: string; personas: number; path?: string; persona?: string }
 /** Why the focused workspace shows no project. */
 export const focusWords = (f: Exclude<Focus, { kind: 'project' }>): string =>
-  f.kind === 'none' ? 'Open a project in Orca to see its personas.' : `${f.name} isn't a git repository.`
+  f.kind === 'none' ? 'Open a project in Orca to see its personas.'
+    : `${f.name} isn't in a git repository. Persona Studio works with apps kept in git; open one to see its personas.`
 /** Where the setup chat is, after setup.start: `existing` when it was already open. */
 /** Where the contract for bringing your own harness is published. */
 export const CONTRACT_URL = 'https://github.com/jejacks0n/orca-persona-studio/blob/main/plugin/CONTRACT.md'

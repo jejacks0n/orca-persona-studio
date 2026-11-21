@@ -60,7 +60,7 @@ export function makeFocus(deps: { host: HostApi<'worker'>; tools: () => Promise<
       const ws = await focusedWorkspace(c, tools)
       if (!ws) return { kind: 'none' }
       const wt = await worktreeOf(tools, ws)
-      if (!wt) return { kind: 'notGit', name: basename(ws.path) }
+      if (!wt) return { kind: 'notGit', name: ws.name || basename(ws.path) }
       return { kind: 'git', name: wt.name, path: ws.path, branch: c.branch }
     }
   }

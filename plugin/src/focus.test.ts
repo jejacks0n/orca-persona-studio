@@ -45,7 +45,7 @@ test('focus is none with no focused workspace, or none local that matches, and s
 test('focus matches a local workspace by name and branch: a git worktree or notGit, at its own path', async () => {
   const { focus } = await setup(local({ name: 'a', path: '/plain', branch: 'main' }, { name: 'c', path: '/repo', branch: 'dev' }), {}, (p) => (p === '/plain' ? null : p))
   focus.set(focused('a', 'main'))
-  assert.deepEqual(await focus.resolve(), { kind: 'notGit', name: 'plain' })
+  assert.deepEqual(await focus.resolve(), { kind: 'notGit', name: 'a' }, 'by its name in Orca')
   focus.set(focused('c', 'dev'))
   assert.deepEqual(await focus.resolve(), { kind: 'git', name: 'repo', path: '/repo', branch: 'dev' })
 })

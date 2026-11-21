@@ -35,7 +35,7 @@ test('no project says why, with nothing to press and no heading', async () => {
   clean(none)
   const notGit = await mount(panel, { host: boot({ kind: 'notGit', name: 'notes' }).host })
   assert.equal(notGit.find({ type: 'Heading' }), null)
-  assert.ok(notGit.find({ text: "notes isn't a git repository." }))
+  assert.ok(notGit.find({ text: "notes isn't in a git repository. Persona Studio works with apps kept in git; open one to see its personas." }))
   clean(notGit)
 })
 
