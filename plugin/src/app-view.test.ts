@@ -58,8 +58,7 @@ test('a row shows kind, severity (polish as "low"), who saw it, "seen in N runs"
   const opens = buttons(html).filter((x) => x.attrs['data-do'] === 'open')
   // Minor sorts above low.
   assert.deepEqual(opens.map((x) => [x.attrs['data-id'], x.attrs['aria-current']]), [['b', undefined], ['a', 'true']])
-  const pick = /<input[^>]*data-do="pick"[^>]*data-id="a"[^>]*>/.exec(html)?.[0] ?? ''
-  assert.ok(pick.includes('type="checkbox"') && pick.includes('aria-label="Select: Title a"'))
+  assert.ok(!html.includes('type="checkbox"'), 'rows select by ⌘- and Shift-click, not checkboxes')
 })
 
 test('an empty New list says "Nothing new"; a search with no hits says "Nothing matches"', () => {
@@ -80,7 +79,8 @@ test('ticking rows shows "N selected" with Group, Keep (New only), Start work…
   const bulk = (h: string) => buttons(h).filter((b) => ['group', 'bulk-keep', 'bulk-work', 'bulk-close', 'unpick'].includes(b.attrs['data-do']))
   assert.deepEqual(bulk(html).map((b) => [b.label, b.attrs['data-do']]), [['Group', 'group'], ['Keep', 'bulk-keep'], ['Close…', 'bulk-close'], ['', 'unpick']])
   assert.equal(button(html, '')!.attrs['aria-label'], 'Clear selection')
-  assert.ok(/data-do="pick" data-id="a"[^>]* checked/.test(html) && !/data-do="pick" data-id="c"/.test(html))
+  assert.equal((html.match(/class="row picked"/g) ?? []).length, 2)
+  assert.equal((html.match(/<span class="sr">Selected<\/span>/g) ?? []).length, 2)
   const kept = listPane(all, overview(), ui({ tab: 'kept', picked: ['c', 'd'] }))
   assert.deepEqual(bulk(kept).map((b) => b.label), ['Group', 'Start work…', 'Close…', ''])
 })
@@ -301,7 +301,7 @@ test('a quote in a title, the search or a persona can\'t leave its attribute or 
     + detailPane(detail('new', { title: x }), o, ui(), {})
   assert.ok(!html.includes('<b>x'))
   assert.ok(field(html, 'q')!.includes('value="&quot;&gt;&lt;b&gt;x"'))
-  assert.ok(html.includes('aria-label="Select: &quot;&gt;&lt;b&gt;x"'))
+  assert.ok(html.includes('data-id="&quot;&gt;&lt;b&gt;x"'))
   assert.equal(buttons(html).find((b) => b.attrs['data-do'] === 'persona')!.attrs['data-persona'], '&quot;&gt;&lt;b&gt;x')
 })
 

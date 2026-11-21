@@ -61,9 +61,9 @@ test("the close dialog's issue box sends closeIssue: true when ticked and leaves
   assert.ok(!('closeIssue' in sent({ reason: 'duplicate' })), 'no box, no field')
 })
 
-test('Group needs two picks: with one it sets the notice "Tick two or more findings in the list, then press Group."', () => {
+test('Group needs two picks: with one it sets the notice "Select two or more findings with ⌘-click or Shift-click, then press Group."', () => {
   const one = uiOf(act({ do: 'group' }, ui({ picked: ['a'] })), ui({ picked: ['a'] }))
-  assert.deepEqual([one.notice, one.dialog], [{ text: 'Tick two or more findings in the list, then press Group.' }, null])
+  assert.deepEqual([one.notice, one.dialog], [{ text: 'Select two or more findings with ⌘-click or Shift-click, then press Group.' }, null])
   assert.deepEqual(uiOf(act({ do: 'group' }, ui({ picked: ['a', 'b'] })), ui({ picked: ['a', 'b'] })).dialog, { type: 'group', ids: ['a', 'b'] })
 })
 
@@ -180,14 +180,18 @@ test('typing in the notes marks them unsaved, and saving sends them against the 
 
 test('the remaining controls: open, back, pick, group-with, reopen, ungroup, screenshots, links, notices', () => {
   const u = ui({ open: 'a', picked: ['b'], notes: { text: 'n', base: 1, dirty: false } })
-  assert.deepEqual(uiOf(act({ do: 'open', id: 'b' }, u), u), { ...u, open: 'b', view: 'detail', opened: true, notes: null, problem: '' })
-  assert.deepEqual(uiOf(act({ do: 'open', id: 'a' }, u), { ...u, view: 'list' }), { ...u, view: 'detail', opened: true }, 'the open one keeps its notes')
+  // A plain click opens it and drops the selection.
+  assert.deepEqual(uiOf(act({ do: 'open', id: 'b' }, u), u), { ...u, picked: [], anchor: 'b', open: 'b', view: 'detail', opened: true, notes: null, problem: '' })
+  assert.deepEqual(uiOf(act({ do: 'open', id: 'a' }, u), { ...u, view: 'list' }), { ...u, picked: [], anchor: 'a', view: 'detail', opened: true }, 'the open one keeps its notes')
   assert.equal(uiOf(act({ do: 'back' }, u), { ...u, view: 'detail' }).view, 'list')
-  assert.deepEqual(uiOf(act({ do: 'pick', id: 'a' }, u), u).picked, ['b', 'a'])
-  assert.deepEqual(uiOf(act({ do: 'pick', id: 'b' }, u), u).picked, [])
+  // ⌘-click adds or drops a row and leaves the open finding; the first one brings the open finding along.
+  assert.deepEqual(uiOf(act({ do: 'open', id: 'a', mod: 'toggle' }, u), u).picked, ['b', 'a'])
+  assert.deepEqual(uiOf(act({ do: 'open', id: 'b', mod: 'toggle' }, u), u).picked, [])
+  const first = uiOf(act({ do: 'open', id: 'b', mod: 'toggle' }, ui({ open: 'a' })), ui({ open: 'a' }))
+  assert.deepEqual([first.picked, first.open, first.anchor], [['a', 'b'], 'a', 'b'])
   assert.deepEqual(uiOf(act({ do: 'unpick' }, u), u).picked, [])
   const gw = uiOf(act({ do: 'group-with' }, u), u)
-  assert.deepEqual([gw.picked, gw.notice, gw.view], [['b', 'a'], { text: 'Tick the findings that belong with this one, then press Group.' }, 'list'])
+  assert.deepEqual([gw.picked, gw.notice, gw.view], [['b', 'a'], { text: '⌘-click the findings that belong with this one, then press Group.' }, 'list'])
   const reopen = request(act({ do: 'reopen' }, u))
   assert.deepEqual(reopen.request.input, { project: 'p1', action: { type: 'reopen', id: 'a' } })
   assert.deepEqual(reopen.then!(u, { undo: null }).notice, { text: 'Reopened.' })
@@ -236,7 +240,6 @@ test("a finding.get refused because the finding is gone clears the open finding 
 
 test('focus after a redraw goes back to the same control, else to one that does the same', () => {
   assert.deepEqual(focusOf({ do: 'open', id: 'f2' }), ['[data-do="open"][data-id="f2"]', '[data-do="open"]'])
-  assert.deepEqual(focusOf({ do: 'pick', id: 'f2' }), ['[data-do="pick"][data-id="f2"]', '[data-do="pick"]'])
   assert.deepEqual(focusOf({ do: 'tab', tab: 'kept' }), ['[data-do="tab"][data-tab="kept"]', '[data-do="tab"]'])
   // Keep carries no id: after it moves on to the next finding, its Keep takes the focus, so Enter keeps going.
   assert.deepEqual(focusOf({ do: 'keep' }), ['[data-do="keep"]'])
@@ -290,6 +293,16 @@ test('Run starts a first run at once and opens the dialog for a later one; Stop 
   assert.equal(watch.then!(going, { ok: true }).notice?.text, `Dex's run is the chat "Dex's run" in the workspace that just opened.`)
   assert.equal(act({ do: 'run', persona: 'maya' }, first), null)
   assert.deepEqual(request(act({ do: 'edit-persona', persona: 'dex' }, first)).request, { name: 'persona.open', input: { project: 'p1', persona: 'dex' } })
+})
+
+test('Shift-click selects the shown rows from the last one clicked, in list order, and leaves the open finding', () => {
+  const rows = [row('a'), row('b'), row('c'), row('d'), row('e', { state: 'kept' })]
+  const shift = (id: string, u: Ui) => { const a = actionOf({ do: 'open', id, mod: 'range' }, u, { project: 'p1', rows }); return uiOf(a, u) }
+  const u = ui({ open: 'a' })
+  assert.deepEqual([shift('c', u).picked, shift('c', u).open], [['a', 'b', 'c'], 'a'])
+  assert.deepEqual(shift('b', ui({ open: 'a', anchor: 'd' })).picked, ['b', 'c', 'd'], 'from the anchor, upward too')
+  assert.deepEqual(shift('c', ui({ anchor: 'zzz' })).picked, ['c'], 'an anchor that left the list starts at the clicked row')
+  assert.deepEqual(shift('e', u).picked, [], 'a row in another list changes nothing')
 })
 
 test("a persona's pane shows until a finding is opened, and Back returns to it", () => {

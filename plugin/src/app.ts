@@ -248,7 +248,8 @@ document.addEventListener('click', (e) => {
   // Cancel and Done only close the dialog; its close event says what that does.
   if (el.dataset.do === 'cancel') return dlg.close()
   flushNotes()
-  void run(actionOf({ ...el.dataset }, ui, { project, rows, shots }))
+  const mod = e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : undefined
+  void run(actionOf({ ...el.dataset, ...(mod && { mod }) }, ui, { project, rows, shots }))
 })
 document.addEventListener('input', (e) => {
   const el = e.target as HTMLInputElement | HTMLTextAreaElement, field = el.dataset?.field

@@ -11,7 +11,8 @@ import { drawTrend, esc, type Trend } from './trends-draw'
 export type RunAgain = { persona: string; name: string; focus?: string }
 /** What the owner chose or typed on the tab. It outlives refetches. `notes`: the open finding's draft, `base` the mtime it started from. */
 export interface Ui { tab: FindingState; persona: string | null; kind: Kind | 'all'; q: string; open: string | null
-  picked: string[]; view: 'list' | 'detail'; notice: { text: string; undo?: string; anyway?: RunAgain } | null
+  /** `anchor`: the row a Shift-click selects from, the last one clicked. */
+  picked: string[]; anchor?: string; view: 'list' | 'detail'; notice: { text: string; undo?: string; anyway?: RunAgain } | null
   /** `opened`: a finding was opened from the list, so it shows instead of the chosen persona's pane (`personaDetail`). */
   opened: boolean; personaDetail: PersonaDetail | null
   dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string }
@@ -79,20 +80,20 @@ export function header(o: Overview, ui: Ui): string {
       btn(esc(label), { 'data-do': 'kind', 'data-kind': k, 'aria-pressed': String(ui.kind === k) }, '')).join('')}</div></header>`
 }
 
-/** One row: its checkbox, its kind, and a button over the rest of it that opens it. */
+/** One row: its kind, and a button over the rest of it that opens it; ⌘/Ctrl- and Shift-click select (src/app-logic.ts). */
 function rowHtml(r: Row, o: Overview, ui: Ui): string {
   const meta = [r.reopened ? chip('Reopened', 'k-polish') : '', severityChip(r.severity), span(kindWord[r.kind]), span(namesOf(o, r.personas)),
     r.runs > 1 ? span(`seen in ${r.runs} runs`) : '', r.members ? chip(`${icon('group')}${r.members} reports`) : '',
     r.pr ? span(`PR #${r.pr.number} ${r.pr.state}`) : r.state === 'progress' ? span('no PR yet') : '',
     r.confirmedBy ? span(`Confirmed by ${nameOf(o, r.confirmedBy)}`, 'ok') : '', r.issue ? span(`Issue #${r.issue}`) : '',
     r.closedReason ? span(reasonWord[r.closedReason]) : ''].join('')
-  return `<div class="row"><input type="checkbox" data-do="pick" data-id="${esc(r.id)}" aria-label="Select: ${esc(r.title)}"${ui.picked.includes(r.id) ? ' checked' : ''}>`
-    + `<span class="k k-${r.kind}" title="${kindWord[r.kind]}">${icon(r.kind)}</span>`
-    + btn(`<span class="title">${esc(r.title)}</span><span class="meta">${meta}</span>`,
+  const on = ui.picked.includes(r.id)
+  return `<div class="row${on ? ' picked' : ''}"><span class="k k-${r.kind}" title="${kindWord[r.kind]}">${icon(r.kind)}</span>`
+    + btn(`<span class="title">${esc(r.title)}</span><span class="meta">${meta}</span>${on ? '<span class="sr">Selected</span>' : ''}`,
       { 'data-do': 'open', 'data-id': r.id, 'aria-current': ui.open === r.id ? 'true' : undefined }, 'open') + '</div>'
 }
 
-/** The five lists as tabs with their counts, the persona filter, the bulk bar for ticked rows, and the chosen list. */
+/** The five lists as tabs with their counts, the persona filter, the bulk bar for selected rows, and the chosen list. */
 export function listPane(all: readonly Row[], o: Overview, ui: Ui): string {
   const f = filterOf(ui), n = counts(all, f), shown = rows(all, { state: ui.tab, ...f })
   const tabs = `<div class="tabs" role="tablist">${STATES.map((s) => btn(`${esc(stateWord[s])}<b>${n[s]}</b>`,

@@ -157,7 +157,7 @@ A run uses your branch's last commit. If you have uncommitted changes, Run says 
 
 ### The tab
 
-One tab per project, with the findings list on the left and the selected finding on the right: what each persona saw, its steps and screenshots, its history, and your notes. Select several findings to keep, close or group them at once, or to start work on them together. Keep and Close can be undone.
+One tab per project, with the findings list on the left and the selected finding on the right: what each persona saw, its steps and screenshots, its history, and your notes. ⌘-click (Ctrl-click) or Shift-click to select several findings and keep, close or group them at once, or to start work on them together. Keep and Close can be undone.
 
 A persona's page shows its current run or when it last ran, its findings, and its goals, with **Run**, **Watch the run** and **Stop**.
 

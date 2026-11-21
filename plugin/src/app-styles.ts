@@ -94,13 +94,14 @@ export const STYLES = `
   .bulk { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px 6px 12px; background: var(--orca-primary); color: var(--orca-primary-foreground); flex: none; }
   .bulk > span { margin-right: auto; font-weight: 600; }
   .bulk .btn { background: transparent; color: inherit; border-color: color-mix(in srgb, currentColor 35%, transparent); }
-  .row { position: relative; display: grid; grid-template-columns: 18px 18px minmax(0, 1fr); gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--orca-border); align-items: start; }
+  .row { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); user-select: none; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--orca-border); align-items: start; }
   .row:hover { background: var(--orca-muted); }
   .row:has(.open[aria-current=true]) { background: var(--orca-muted); box-shadow: inset 3px 0 0 var(--orca-primary); }
-  .row input { position: relative; z-index: 1; margin: 2px 0 0; width: 14px; height: 14px; }
+  .row.picked, .row.picked:hover { background: color-mix(in srgb, var(--orca-primary) 14%, transparent); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .row .k { margin-top: 1px; }
   .open { display: block; min-width: 0; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; }
-  /* The open button covers the whole row, so a click anywhere but the checkbox opens it. */
+  /* The open button covers the whole row, so a click anywhere on it opens or selects it. */
   .open::after { content: ""; position: absolute; inset: 0; }
   .open:focus-visible { outline: 0; }
   .row:has(.open:focus-visible) { outline: 2px solid var(--orca-ring); outline-offset: -2px; }

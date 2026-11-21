@@ -39,17 +39,28 @@ export function actionOf(d: Partial<Record<string, string>>, ui: Ui, ctx: Ctx): 
       ...(u.persona !== d.persona && { view: 'detail' as const }) })) : null
     case 'everyone': return change((u) => ({ ...u, persona: null }))
     case 'clear-q': return change((u) => ({ ...u, q: '' }))
-    case 'pick': return d.id ? change((u) => ({ ...u, picked: toggle(u.picked, d.id!) })) : null
     case 'unpick': return change((u) => ({ ...u, picked: [] }))
     // Opening another finding starts its notes afresh; the open one again only shows it.
-    case 'open': return d.id ? change((u) => (u.open === d.id ? { ...u, view: 'detail', opened: true } : { ...u, open: d.id!, view: 'detail', opened: true, notes: null, problem: '' })) : null
+    // ⌘/Ctrl-click adds or drops a row (the open one comes along at first), Shift-click selects the rows from the last one clicked; both leave the open finding.
+    case 'open': {
+      const id = d.id
+      if (!id) return null
+      if (d.mod === 'toggle') return change((u) => ({ ...u, anchor: id, picked: toggle(u.picked.length || !u.open || u.open === id ? u.picked : [u.open], id) }))
+      if (d.mod === 'range') return change((u) => {
+        const ids = listed(ctx.rows, { state: u.tab, ...filterOf(u) }).map((r) => r.id), to = ids.indexOf(id)
+        const from = ids.indexOf(u.anchor ?? u.open ?? id) < 0 ? to : ids.indexOf(u.anchor ?? u.open ?? id)
+        return to < 0 ? u : { ...u, picked: ids.slice(Math.min(from, to), Math.max(from, to) + 1) }
+      })
+      // A plain click opens it and drops the selection.
+      return change((u) => ({ ...u, picked: [], anchor: id, view: 'detail', opened: true, ...(u.open !== id && { open: id, notes: null, problem: '' }) }))
+    }
     // Back to the list, and to the chosen persona's pane when a finding had replaced it.
     case 'back': return change((u) => ({ ...u, view: 'list', opened: false }))
     case 'dismiss': return change((u) => ({ ...u, notice: null }))
     case 'cancel': return change((u) => ({ ...u, dialog: null }))
     case 'link': return d.url && /^https?:\/\//i.test(d.url) ? { link: d.url } : null
     case 'group':
-      return ui.picked.length < 2 ? change(say('Tick two or more findings in the list, then press Group.'))
+      return ui.picked.length < 2 ? change(say('Select two or more findings with ⌘-click or Shift-click, then press Group.'))
         : change((u) => ({ ...u, dialog: { type: 'group', ids: [...ui.picked] } }))
     case 'bulk-keep': {
       const ids = [...ui.picked]
@@ -90,7 +101,7 @@ export function actionOf(d: Partial<Record<string, string>>, ui: Ui, ctx: Ctx): 
     case 'reopen': return finding({ type: 'reopen', id: open }, say('Reopened.'))
     case 'ungroup': return finding({ type: 'ungroup', id: open }, say('Ungrouped.'))
     case 'group-with': return change((u) => ({ ...u, picked: u.picked.includes(open) ? u.picked : [...u.picked, open], view: 'list',
-      notice: { text: 'Tick the findings that belong with this one, then press Group.' } }))
+      notice: { text: '⌘-click the findings that belong with this one, then press Group.' } }))
     case 'discuss': return ask('discuss.start', { project, id: open }, (u, out) => say(out.existing
       ? `The discussion is open in your tabs as "${out.title}".` : 'Started a discussion. What you decide lands in the notes.')(u))
     case 'start': return ask('work.draft', { project, ids: [open] }, (u, draft) => (u.open === open ? { ...u, dialog: { type: 'work', ids: [open], ...draft } } : u))
