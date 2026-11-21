@@ -348,7 +348,10 @@ export default function activate(orca: OrcaWorkerApi): void {
   handle('persona.open', async ({ project, persona }) => {
     const p = await projectOf(project), s = sheetsOf(p).find((x) => x.id === persona)
     if (!s) throw invalid(`There's no persona "${persona}" in ${p.name}.`)
-    return openFile(s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
+    // The focused worktree's copy of the file, when it has one: editing happens where you are, not in the main checkout.
+    const f = await focusNow().catch(() => undefined)
+    const here = f?.kind === 'project' && f.path ? join(f.path, relative(p.path, s.sheetPath)) : ''
+    return openFile(here && existsSync(here) ? here : s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
   })
   // A run tests the last commit, so uncommitted changes would silently miss it: say so first, unless told to run anyway.
   handle('run.start', async ({ project, persona, focus, anyway }) => {

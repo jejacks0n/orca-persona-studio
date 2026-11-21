@@ -487,6 +487,20 @@ test('persona.open opens the persona\'s file in the checkout, by its relative pa
   assert.equal(err.code, 'invalid_params')
 })
 
+test('persona.open opens the focused worktree\'s copy of the persona file, and the checkout\'s when it has none', async () => {
+  const dir = copy(), wt = mkdtempSync(join(tmpdir(), 'studio-wt-'))
+  cleanup.push(() => rmSync(wt, { recursive: true, force: true }))
+  worker.setRunner(fakeRunner())
+  const w = await mount(hostFor(dir, { projects: [{ id: 'app', name: 'app', path: dir, branch: 'main' }] },
+    { results: { 'workspace.list': local({ name: 'app', path: dir, branch: 'main' }, { name: 'feature', path: wt, branch: 'feature' }) } }))
+  await w.emit('workspace.changed', focused('feature', 'feature'))
+  await w.request('persona.open', { project: 'app', persona: 'maya' })
+  mkdirSync(join(wt, 'docs/qa/personas'), { recursive: true })
+  writeFileSync(join(wt, 'docs/qa/personas/maya.md'), read(join(dir, 'docs/qa/personas/maya.md')))
+  await w.request('persona.open', { project: 'app', persona: 'maya' })
+  assert.deepEqual(w.host.callsOf('editor.open'), [{ workspaceId: 'main', path: 'docs/qa/personas/maya.md' }, { workspaceId: 'ws1', path: 'docs/qa/personas/maya.md' }])
+})
+
 test('answers are plain JSON: a finding with no issue, PR or close has no undefined fields in its row', async () => {
   const { w } = await seeded([finding('f1')])
   const out = await w.request('findings.list', { project: 'app' })
