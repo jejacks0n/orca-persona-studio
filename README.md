@@ -36,11 +36,10 @@
 ### Install
 
 ```sh
-git clone https://github.com/jejacks0n/orca-persona-studio.git
-orca plugin dev load ./orca-persona-studio/plugin
+orca plugin install jejacks0n.persona-studio
 ```
 
-Orca shows the access the plugin asks for and asks you to approve it.
+Orca shows the access the plugin asks for and asks you to approve it. `orca plugin update jejacks0n.persona-studio` brings it up to the newest release.
 
 ### Set up personas
 
@@ -173,6 +172,13 @@ A persona's page shows its current run or when it last ran, its findings, and it
 
 The plugin is TypeScript, loaded by Orca straight from `plugin/src/`. The worker (`worker.ts`) holds all state; the sidebar (`panel.tsx`) and the tab (`app*.ts`) ask it and redraw.
 
+To run your own copy, load the folder in place of the installed plugin; edits take effect on `orca plugin dev reload`:
+
+```sh
+git clone https://github.com/jejacks0n/orca-persona-studio.git
+orca plugin dev load ./orca-persona-studio/plugin
+```
+
 ```sh
 orca plugin types plugin                           # the Orca typings tsc needs (once per Orca update)
 npx --yes -p typescript@5 tsc -p plugin --noEmit   # types
@@ -186,6 +192,7 @@ CI runs all of these on Linux against a pinned Orca and Orca's newest release, o
 - `plugin/src/`: the worker, the sidebar, the tab, and their tests
 - `plugin/CONTRACT.md`: the persona file, prompts, results and done files
 - `.github/workflows/ci.yml`: CI
+- `orca-catalog.json`: the community catalog entry; each release adds the entry `orca plugin release-entry plugin` prints, then tags `v<version>`
 
 ## License
 
