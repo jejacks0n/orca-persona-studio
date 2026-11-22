@@ -1,0 +1,90 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-catalog.v2.schema.json",
+  "catalogVersion": 2,
+  "name": "Persona Studio",
+  "owner": "jejacks0n",
+  "plugins": [
+    {
+      "id": "jejacks0n.persona-studio",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/jejacks0n/orca-persona-studio.git",
+        "ref": "main",
+        "path": "plugin"
+      },
+      "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
+      "categories": [
+        "panels",
+        "testing",
+        "agents"
+      ],
+      "releases": [
+        {
+          "version": "0.1.0",
+          "commit": "841de831945dc254d808bc1bda8f9ff8cb79df1b",
+          "contentHash": "ac36c77068a77c5482a00fb36513878d541d3a66367875117347316ab1b91b2f",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.248",
+          "name": "Persona Studio",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Persona Studio"
+            },
+            {
+              "kind": "commands",
+              "name": "Persona Studio: open the tab"
+            },
+            {
+              "kind": "commands",
+              "name": "Persona Studio: what needs me"
+            },
+            {
+              "kind": "events",
+              "name": "agent.status.changed"
+            },
+            {
+              "kind": "events",
+              "name": "workspace.changed"
+            },
+            {
+              "kind": "syntaxes",
+              "name": "JSON",
+              "detail": "persona.studio"
+            },
+            {
+              "kind": "customEditors",
+              "name": "Persona Studio",
+              "detail": "persona.studio"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "settings:own",
+            "notifications:show",
+            "agent:launch",
+            "agent:read",
+            "workspace:read",
+            "workspace:write"
+          ],
+          "images": {
+            "icon": {
+              "path": "plugin/assets/icon.png",
+              "alt": "Persona Studio",
+              "sha256": "5b91a62de8f401de297757803c6c9d42fae618fbc705f0b849de36028f327487",
+              "width": 256,
+              "height": 256
+            },
+            "cover": {
+              "path": "plugin/assets/cover.png",
+              "alt": "The Persona Studio tab: a project's new findings, what each persona saw on the open one, and the personas with their new findings.",
+              "sha256": "ef7204ee2ab184fdd97c5d94627cb5c9ec68833837d9a04e41b00810109d45af",
+              "width": 1600,
+              "height": 1000
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
