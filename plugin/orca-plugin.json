@@ -4,6 +4,11 @@
   "name": "Persona Studio",
   "version": "0.1.0",
   "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
+  "author": { "name": "jejacks0n", "url": "https://github.com/jejacks0n" },
+  "license": "MIT",
+  "repository": "https://github.com/jejacks0n/orca-persona-studio",
+  "icon": "assets/icon.png",
+  "cover": { "path": "assets/cover.png", "alt": "The Persona Studio tab: a project's new findings, what each persona saw on the open one, and the personas with their new findings." },
   "engines": {
     "orca": ">=1.4.248"
   },
