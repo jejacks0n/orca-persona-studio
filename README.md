@@ -25,6 +25,8 @@
 4. **Hand off.** **Start work** makes an Orca worktree with an agent briefed from the finding and your notes, then moves the finding to Fixed once that work merges. **Make an issue** sends it to GitHub instead.
 5. **Run again.** A persona's next run rechecks the fixes for what it reported and scores its goals again, so you can watch a number like "keys to export" go down.
 
+Each run starts two or three agent chats: the persona's run, a review if you set `reviewPrompt`, and one that matches its reports against the findings list. Each persona's copy also runs your `prepare` commands, such as `npm ci`, and **Run all idle** does all of that for every persona at once.
+
 ## Getting started
 
 ### Requirements
@@ -32,6 +34,9 @@
 - [Orca](https://orca.dev) 1.4.248 or newer
 - Your app in a git repository
 - Optional: the GitHub CLI (`gh`), for making issues and following pull requests
+- macOS or Linux. Windows isn't supported: Persona Studio runs commands with `sh` and looks for its tools in Unix paths.
+
+If Persona Studio can't find Orca, git or gh, set its path in Persona Studio's settings.
 
 ### Install
 
@@ -139,9 +144,17 @@ To split the work in two, add `reviewPrompt`: a second agent reads what the run 
 | `resultsFile` | `results.json` | The results file's name in a run folder |
 | `worktrees` | `true` | `false` runs personas in your own checkout, one at a time, instead of a worktree each |
 
-A prompt field holds a path to a `.md` file in your project, or the prompt itself. `persona.studio` is the one file Persona Studio adds to your project; its working files, such as each finding's brief and notes, live in `~/.persona-studio/<project>/`.
+A prompt field holds a path to a `.md` file in your project, or the prompt itself.
 
 A persona is a Markdown file with a `# Name: tag` heading and `## Who`, `## Goals` and an optional `## Script`. A goal can be judged (met, close, not met) or counted, like "Open a photo in three presses or fewer" with a `Counted:` line under it. [CONTRACT.md](plugin/CONTRACT.md#persona-files) has the format.
+
+## What it touches
+
+- **Your project:** `persona.studio` is the only file Persona Studio adds there. The persona files are written by the setup chat, and you commit them. With `"worktrees": false`, run output also lands in `runsDir` in your checkout.
+- **Its own folder:** its working files, such as each finding's brief and notes, the prompts it hands to agents, and run logs, live in `~/.persona-studio/<project>/`. They stay after you uninstall, so delete the folder to remove them.
+- **Worktrees:** each persona gets an Orca worktree on the branch `studio/qa-<persona>` (or `studio/qa-<folder>-<persona>` when you run from another worktree), and each **Start work** makes one more.
+- **Commands:** it runs `start` and `prepare` from `persona.studio` with `sh`, and drives Orca, git and gh through their command-line tools.
+- **The network:** Persona Studio sends nothing off your machine itself. Only git and gh do, for fetches, issues and pull request checks. The agent chats it starts are Orca's, like any other chat.
 
 ## Using it
 
