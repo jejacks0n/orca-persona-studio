@@ -165,6 +165,16 @@ test("a run resets what preparing left in the copy, but not a change made there 
   assert.equal(resets(), 3)
 })
 
+test('what preparing left in the copy is still reset after a run whose app never came up', async () => {
+  const { w, calls } = await setup({ config: { prepare: ['npm install'], start: 'exit 1' } })
+  for (const n of [1, 2]) {
+    assert.deepEqual(await start(w), { ok: true })
+    await until(async () => (await rowOf(w)).error, `run ${n} to fail`)
+    assert.match((await rowOf(w)).error!, /^The app stopped before it answered/)
+    assert.equal(calls.filter((a) => a[0] === 'reset').length, n)
+  }
+})
+
 test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {
   const { dir, host, w, calls, made } = await setup({ config: { worktrees: false, copy: ['.env'], prepare: ['echo prepared > prepared.txt'] }, status: ' M src/app.ts\n' })
   writeFileSync(join(dir, '.env'), 'mine')

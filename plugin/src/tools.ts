@@ -106,7 +106,7 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
     async changes(path) {
       abs(path)
       // ponytail: the diff is read whole, so one over the runner's 10 MB fails the run; hash it in a stream if that bites.
-      const diff = await ok(paths.git, ['diff', 'HEAD', '--binary'], path)
+      const diff = await ok(paths.git, ['diff', 'HEAD', '--binary', '--no-color', '--no-ext-diff'], path)
       return { files: diff.split('\n').filter((l) => l.startsWith('diff --git ')).length, print: diff && createHash('sha256').update(diff).digest('hex') }
     },
     async createIssue(repo, title, body) {
