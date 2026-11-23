@@ -44,7 +44,6 @@
   "capabilities": [
     { "kind": "storage:own" },
     { "kind": "settings:own" },
-    { "kind": "notifications:show" },
     { "kind": "agent:launch" },
     { "kind": "agent:read" },
     { "kind": "workspace:read" },
