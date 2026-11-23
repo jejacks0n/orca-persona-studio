@@ -1,7 +1,7 @@
 // The Persona Studio tab: one project's findings, in Orca's main area. Its file is the project's committed persona.studio,
 // which holds the project's config; the tab's project is the focused one. src/app-view.ts draws the page and src/app-logic.ts says what each control does;
 // this is only the glue between them and the page.
-import { actionOf, applyShow, failureOf, isDarkColor, fieldOf, findingRefused, focusOf, notesRefused, refetchesFinding, refusedOf, rootClass, saveOf, settle, showsPersona, withDetail, type Act } from './app-logic'
+import { actionOf, applyShow, failureOf, fieldOf, findingRefused, focusOf, notesRefused, refetchesFinding, refusedOf, rootClass, saveOf, settle, showsPersona, withDetail, type Act } from './app-logic'
 import { STYLES } from './app-styles'
 import { detailPane, dialog, freshUi, header, listPane, message, noticeBar, personaPane, zeroPane, type Ui } from './app-view'
 import type { Row } from './findings-view'
@@ -317,18 +317,8 @@ async function loadProject(): Promise<void> {
   void refresh(true)
 }
 
-/** Sit on the owner's terminal colour when its lightness suits the theme; else the stylesheet's chat-canvas mix stays. */
-async function matchCanvas(): Promise<void> {
-  const { canvas } = await orca.plugin.request('theme.get').catch(() => ({ canvas: null }))
-  const root = document.documentElement
-  if (canvas && isDarkColor(canvas) === root.classList.contains('dark')) root.style.setProperty('--ps-canvas', canvas)
-  else root.style.removeProperty('--ps-canvas')
-}
-
 draw()
 void loadProject()
-void matchCanvas()
-orca.on('theme', () => void matchCanvas())
 // The tab stays on its own project. It moves only off one whose persona.studio isn't its file (it loaded while another
 // workspace was focused), onto the focused one that is; or onto the focused project when it has none yet.
 orca.plugin.on('focus', async (f) => {

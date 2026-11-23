@@ -248,10 +248,3 @@ export const refetchesFinding = (ui: Ui, posted: PluginPanelEvents['changed']): 
 
 /** The root's classes: `narrow` under 700 px, where only the pane `ui.view` names shows. */
 export const rootClass = (ui: Ui, width: number): string => `app${width < 700 ? ' narrow' : ''} v-${ui.view}`
-
-/** Whether a #rgb or #rrggbb colour is dark: its luminance is under half. */
-export function isDarkColor(hex: string): boolean {
-  const h = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join('') : hex.slice(1)
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5
-}
