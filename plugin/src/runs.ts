@@ -28,6 +28,12 @@ export interface RunCtx { storage: StorageApi; host: HostApi<'worker'>; tools():
 export const NO_START = `Persona Studio doesn't know how to start this app yet. Set "start" in persona.studio, or set up personas.`
 /** An error the panels show as a refusal of what was asked. */
 export const invalid = (message: string) => Object.assign(new Error(message), { code: 'invalid_params' })
+/** The branch `p`'s checkout is on now, read from git: it can change after the project is first seen. Refuses when it's on none. */
+export async function branchNow(tools: Tools, p: Project, again = 'run again') {
+  const branch = await tools.branchOf(p.path)
+  if (branch === null) throw invalid(`${p.name}'s checkout isn't on a branch. Check out a branch and ${again}.`)
+  return branch
+}
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 /** For the chain: SIGTERM the app's group now, so a reload can't lose it, and finish stopping it after the chain moves on. */
 function halt(pid: number) {
@@ -260,7 +266,7 @@ export function makeRuns(c: RunCtx) {
   }
 
   /** Outside the chain: the QA copy, the app and the run chat. Never rejects; a throw fails the run. */
-  async function begin(p: Project, persona: string, run: ActiveRun) {
+  async function begin(p: Project, persona: string, run: ActiveRun, base: string) {
     const id = run.id
     let pid: number | undefined, chat: string | undefined
     const name = nameOf(p, persona)
@@ -285,7 +291,7 @@ export function makeRuns(c: RunCtx) {
         const slug = root === p.path ? `qa-${persona}` : `qa-${basename(p.path)}-${persona}`, branch = `studio/${slug}`
         let ws = await findWorkspace(c.host, tools, branch, root, 1)
         if (!ws) {
-          await tools.createWorktree({ projectPath: p.path, name: slug, branch, base: p.branch, setup: config.setup })
+          await tools.createWorktree({ projectPath: p.path, name: slug, branch, base, setup: config.setup })
           ws = await findWorkspace(c.host, tools, branch, root, 10)
           if (!ws) throw new Error(`Orca made ${name}'s copy, ${branch}, but doesn't list it.`)
         }
@@ -297,7 +303,7 @@ export function makeRuns(c: RunCtx) {
         if (print && print !== (await loadRecord(c.storage, p.id, persona)).prepared) {
           throw new Error(`${name}'s copy (${qa.path}) has changes that aren't committed in ${files === 1 ? '1 file' : `${files} files`}. Commit or discard them there, then run again.`)
         }
-        await tools.resetQa(qa.path, p.branch)
+        await tools.resetQa(qa.path, base)
       }
       if (!(await still())) return await gone()
       if (!config.runPrompt) {
@@ -366,6 +372,8 @@ export function makeRuns(c: RunCtx) {
       // A stopped run's preparing may still be at work in the same QA copy.
       if (beginning.has(`${p.id}:${persona}`)) throw invalid(`${sheet.name}'s last run is still stopping. Try again in a moment.`)
       if (!config.start && !config.runPrompt) throw invalid(NO_START)
+      // In its own copy, a run starts from the branch the checkout is on now. In the checkout itself, nothing is reset.
+      const base = inPlace(config) ? p.branch : await branchNow(await c.tools(), p)
       const runs = await active()
       const other = runs.find((x) => x.project === p.id)
       if (other && inPlace(config)) throw invalid(`Runs use ${p.name}'s own checkout, so personas take turns. ${nameOf(p, other.persona)} is running.`)
@@ -380,7 +388,7 @@ export function makeRuns(c: RunCtx) {
       await saveRecord(c.storage, r)
       c.post('changed', { project: p.id })
       beginning.add(`${p.id}:${persona}`)
-      void begin(p, persona, run)
+      void begin(p, persona, run, base)
     }),
 
     /** Drops the run at once; the chat is told and the next match starts after the request has answered. */

@@ -42,7 +42,9 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   /** workspace.list names branches as refs/heads/<name>. */
   refs?: boolean
   /** What `git status --porcelain` says about the project's checkout: its uncommitted files. */
-  status?: string } = {}) {
+  status?: string
+  /** The branch the project's checkout is on now (default main); null for a detached HEAD. */
+  branch?: string | null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'studio-runs-')), root = `${dir}-files`, qaRoot = `${dir}-qa`
   cleanup.push(() => { for (const d of [dir, root, qaRoot]) rmSync(d, { recursive: true, force: true }) })
   cpSync(fixture('project'), dir, { recursive: true })
@@ -78,6 +80,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
     if (args[0] === 'reset') diffs[opts!.cwd!] = ''
     if (args[0] === '-c' && args[1] === 'npm install') diffs[opts!.cwd!] = LOCK
     if (args[0] === 'diff') return ok(diffs[opts!.cwd!] ?? '')
+    if (args.includes('symbolic-ref')) return o.branch === null ? { code: 1, stdout: '', stderr: '' } : ok(`${o.branch ?? 'main'}\n`)
     return ok('')
   }
   worker.setRunner(runner)
@@ -173,6 +176,26 @@ test('what preparing left in the copy is still reset after a run whose app never
     assert.match((await rowOf(w)).error!, /^The app stopped before it answered/)
     assert.equal(calls.filter((a) => a[0] === 'reset').length, n)
   }
+})
+
+test('a project first seen on main, run after its checkout moved to feature-x, makes and resets its copy from feature-x', async () => {
+  const { host, w, calls } = await setup({ branch: 'feature-x' })
+  await start(w)
+  await using(host)
+  const create = calls.find((a) => a[0] === 'worktree' && a[1] === 'create')!
+  assert.equal(create[create.indexOf('--base-branch') + 1], 'feature-x')
+  assert.ok(calls.some((a) => a.join(' ') === 'reset --hard feature-x'))
+  assert.equal(calls.some((a) => a.join(' ') === 'reset --hard main'), false)
+  await w.request('run.stop', { project: 'app', persona: 'maya' })
+})
+
+test('a checkout that isn\'t on a branch refuses runs and Start work in plain words', async () => {
+  const { host, w, made } = await setup({ branch: null, findings: [{ id: 'f1', title: 'T', kind: 'bug', labels: [], severity: 'major', state: 'kept',
+    reports: [], history: [] }] })
+  await assert.rejects(start(w), /app's checkout isn't on a branch\. Check out a branch and run again\./)
+  assert.equal(runOf(host), undefined)
+  assert.deepEqual(made, [])
+  await assert.rejects(w.request('work.draft', { project: 'app', ids: ['f1'] }), /app's checkout isn't on a branch\. Check out a branch and try again\./)
 })
 
 test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {

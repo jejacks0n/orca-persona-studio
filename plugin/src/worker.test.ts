@@ -27,6 +27,7 @@ function fakeRunner(calls: string[][] = []): Runner {
   return async (_cmd, args) => {
     calls.push(args)
     if (args.includes('--git-common-dir')) return { code: 0, stdout: `${join(args[1], '.git')}\n`, stderr: '' }
+    if (args.includes('symbolic-ref')) return { code: 0, stdout: 'main\n', stderr: '' }
     return { code: 0, stdout: '', stderr: '' }
   }
 }
@@ -96,6 +97,22 @@ test('focusing a git worktree makes it a project, leaves its checkout untouched 
   await w.emit('workspace.changed', focused('app', 'main'))
   assert.deepEqual(await w.request('focus.get'), project)
   assert.equal((w.host.data().storage.projects as unknown[]).length, 2)
+})
+
+test('a project first seen on main, focused again after its checkout moved to feature-x, keeps its id, stores feature-x and starts work from it', async () => {
+  const dir = copy(), id = basename(dir), others = fakeRunner()
+  let branch = 'main'
+  worker.setRunner(async (cmd, args, opts) => args.includes('symbolic-ref') ? { code: 0, stdout: `${branch}\n`, stderr: '' } : others(cmd, args, opts))
+  const w = await mount(hostFor(dir, { [`findings:${id}`]: json({ v: 2, project: id, next: 2, findings: [finding('f1', { state: 'kept' })] }) },
+    { results: { 'workspace.list': () => local({ name: 'app', path: dir, branch }) } }))
+  await w.emit('workspace.changed', focused('app', 'main'))
+  branch = 'feature-x'
+  await w.emit('workspace.changed', focused('app', 'feature-x'))
+  assert.deepEqual(await w.request('focus.get'), { kind: 'project', id, name: id, personas: 2, path: dir })
+  assert.deepEqual(w.host.data().storage.projects, [{ id, name: id, path: dir, branch: 'feature-x' }])
+  const draft = await w.request('work.draft', { project: id, ids: ['f1'] })
+  assert.equal(draft.base, 'feature-x')
+  assert.ok(draft.brief.includes('open a PR against `feature-x`'))
 })
 
 test('a persona\'s QA worktree is its project, with that persona named; no project is stored for it', async () => {
@@ -763,6 +780,7 @@ function workRunner(calls: string[][], o: { pr?: { number: number; url: string; 
     if (args.includes('rev-parse') && args.includes('HEAD')) return { code: 0, stdout: 'c0\n', stderr: '' }
     if (args.includes('rev-parse') && args.includes('fix-it')) return { code: 0, stdout: `${o.head ?? 'c0'}\n`, stderr: '' }
     if (args.includes('merge-base')) return { code: o.merged ? 0 : 1, stdout: '', stderr: '' }
+    if (args.includes('symbolic-ref')) return { code: 0, stdout: 'main\n', stderr: '' }
     if (args[0] === 'pr' && args[1] === 'list') return { code: 0, stdout: JSON.stringify(o.pr ? [o.pr] : []), stderr: '' }
     return { code: 0, stdout: '', stderr: '' }
   }
