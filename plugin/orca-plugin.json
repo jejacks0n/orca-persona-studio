@@ -3,7 +3,7 @@
   "id": "persona-studio",
   "name": "Persona Studio",
   "version": "0.1.0",
-  "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
+  "description": "Personas use your app in Orca's browser and bring back the bugs, missing pieces and rough edges that got in their way.",
   "author": { "name": "jejacks0n", "url": "https://github.com/jejacks0n" },
   "license": "MIT",
   "repository": "https://github.com/jejacks0n/orca-persona-studio",

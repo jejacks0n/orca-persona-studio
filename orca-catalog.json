@@ -12,7 +12,7 @@
         "ref": "main",
         "path": "plugin"
       },
-      "description": "Improve your Test-Driven Development with simulated personas and highly specific user goals.",
+      "description": "Personas use your app in Orca's browser and bring back the bugs, missing pieces and rough edges that got in their way.",
       "categories": [
         "panels",
         "testing",
