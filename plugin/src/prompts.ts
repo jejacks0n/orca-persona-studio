@@ -180,8 +180,8 @@ same session, so they read as one set.
 
 Read the whole persona file first. Draw the person it describes, not their job title.
 
-- **Gender:** use the pronouns the file uses for them ("he", "she", "they"). If the file never says, go by the name.
-  When the file says "they", or the name doesn't tell you, draw someone who could be anyone.
+- **Gender:** use the pronouns the file uses for them ("he", "she", "they"). When it says "they", or never says,
+  draw someone who could be anyone. Never guess it from the name.
 - **Age:** if the file says or implies it ("since the BBS days", "retired", "a student"), show it: grey or thinning
   hair, lines around the eyes, reading glasses; or a young face. If the file gives no hint, draw an adult of no
   particular age rather than guessing.
