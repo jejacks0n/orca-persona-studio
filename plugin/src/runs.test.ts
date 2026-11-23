@@ -42,9 +42,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   /** workspace.list names branches as refs/heads/<name>. */
   refs?: boolean
   /** What `git status --porcelain` says about the project's checkout: its uncommitted files. */
-  status?: string
-  /** The same for each persona's copy; `--untracked-files=no` leaves out its ?? lines, as git does. */
-  copyStatus?: string } = {}) {
+  status?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'studio-runs-')), root = `${dir}-files`, qaRoot = `${dir}-qa`
   cleanup.push(() => { for (const d of [dir, root, qaRoot]) rmSync(d, { recursive: true, force: true }) })
   cpSync(fixture('project'), dir, { recursive: true })
@@ -53,6 +51,8 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
     start: SERVER, ...o.config }))
   worker.setFilesRoot(root)
   const calls: string[][] = [], made: { name: string; path: string; branch: string }[] = []
+  /** `git diff HEAD --binary` in each copy: a reset clears it, and a prepare of `npm install` rewrites the lockfile. */
+  const diffs: Record<string, string> = {}
   /** What `orca agent list` answers. */
   const agents: { orcaSessionId: string; kind: string; state: string }[] = []
   let sessions = 0
@@ -74,10 +74,10 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
       return ok(JSON.stringify({ result: { outcome: { sessionId: `s${n}` } } }))
     }
     if (args[0] === 'agent' && args[1] === 'list') return ok(JSON.stringify({ result: { agents } }))
-    if (args[0] === 'status' && args[1] === '--porcelain') {
-      const out = (opts?.cwd === dir ? o.status : o.copyStatus) ?? ''
-      return ok(args.includes('--untracked-files=no') ? out.split('\n').filter((l) => !l.startsWith('??')).join('\n') : out)
-    }
+    if (args[0] === 'status' && args[1] === '--porcelain') return ok(o.status ?? '')
+    if (args[0] === 'reset') diffs[opts!.cwd!] = ''
+    if (args[0] === '-c' && args[1] === 'npm install') diffs[opts!.cwd!] = LOCK
+    if (args[0] === 'diff') return ok(diffs[opts!.cwd!] ?? '')
     return ok('')
   }
   worker.setRunner(runner)
@@ -87,7 +87,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   const host = mockHost(opts({ projects: [{ id: 'app', name: 'app', path: dir, branch: 'main' }],
     'findings:app': json({ v: 2, project: 'app', next: (o.findings?.length ?? 0) + 1, findings: o.findings ?? [] }), ...o.storage }))
   const w = await mount(host)
-  return { dir, files: join(root, 'app'), host, w, calls, made, opts, agents }
+  return { dir, files: join(root, 'app'), host, w, calls, made, opts, agents, diffs }
 }
 async function mount(host: MockHost): Promise<TestWorker> {
   hosts.push(host)
@@ -121,6 +121,8 @@ function done(files: string, taskId: string, v: unknown) {
   mkdirSync(join(files, 'tasks'), { recursive: true })
   writeFileSync(doneFilePath(files, taskId), typeof v === 'string' ? v : JSON.stringify(v))
 }
+const LOCK = 'diff --git a/package-lock.json b/package-lock.json\n-  "version": "1"\n+  "version": "2"\n'
+const EDIT = 'diff --git a/docs/qa/personas/maya.md b/docs/qa/personas/maya.md\n+More about Maya.\n'
 const NO_START = `Persona Studio doesn't know how to start this app yet. Set "start" in persona.studio, or set up personas.`
 /** The fixture's own-harness prompts: a run prompt without {port}, and a review prompt. */
 const harness = { start: undefined, runPrompt: 'docs/qa/run-prompt.md', reviewPrompt: 'docs/qa/review-prompt.md' }
@@ -138,19 +140,29 @@ test('uncommitted changes hold a run back with how many files have them; anyway 
   await w.request('run.stop', { project: 'app', persona: 'maya' })
 })
 
-test("a copy with uncommitted changes fails the run without a reset; new files alone don't hold it back", async () => {
-  const held = await setup({ copyStatus: ' M docs/qa/personas/maya.md\nM  src/app.ts\n?? qa-runs/r1/results.json\n' })
-  assert.deepEqual(await start(held.w), { ok: true })
-  await until(async () => (await rowOf(held.w)).error, "Maya's run to fail")
-  const qa = held.made[0].path
-  assert.equal((await rowOf(held.w)).error, `Maya's copy (${qa}) has changes that aren't committed in 2 files. Commit or discard them there, then run again.`)
-  assert.equal(held.calls.some((a) => a.includes('reset')), false)
-  assert.equal(runOf(held.host), undefined)
-  const fine = await setup({ copyStatus: '?? qa-runs/r1/results.json\n' })
-  assert.deepEqual(await start(fine.w), { ok: true })
-  await using(fine.host)
-  assert.ok(fine.calls.some((a) => a.join(' ') === 'reset --hard main'))
-  await fine.w.request('run.stop', { project: 'app', persona: 'maya' })
+test("a run resets what preparing left in the copy, but not a change made there after", async () => {
+  const { host, w, calls, made, diffs } = await setup({ config: { prepare: ['npm install'] } })
+  const resets = () => calls.filter((a) => a[0] === 'reset').length
+  const again = async () => {
+    assert.deepEqual(await start(w), { ok: true })
+    await using(host)
+    await w.request('run.stop', { project: 'app', persona: 'maya' })
+  }
+  await again()
+  const qa = made[0].path
+  assert.equal(diffs[qa], LOCK)
+  // Its own rewritten lockfile doesn't hold the next run back.
+  await again()
+  assert.equal(resets(), 2)
+  diffs[qa] = LOCK + EDIT
+  assert.deepEqual(await start(w), { ok: true })
+  await until(async () => (await rowOf(w)).error, "Maya's run to fail")
+  assert.equal((await rowOf(w)).error, `Maya's copy (${qa}) has changes that aren't committed in 2 files. Commit or discard them there, then run again.`)
+  assert.equal(resets(), 2)
+  // Discarded, with new files left there, it runs again.
+  diffs[qa] = ''
+  await again()
+  assert.equal(resets(), 3)
 })
 
 test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {

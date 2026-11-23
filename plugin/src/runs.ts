@@ -291,9 +291,12 @@ export function makeRuns(c: RunCtx) {
         }
         qa = { path: ws.path, branch, workspaceId: ws.id }
         if (!(await still())) return await gone()
-        // A reset would wipe edits made in the copy. New files survive it, and the run's own output is one.
-        const changed = await tools.uncommitted(qa.path, true)
-        if (changed) throw new Error(`${name}'s copy (${qa.path}) has changes that aren't committed in ${changed === 1 ? '1 file' : `${changed} files`}. Commit or discard them there, then run again.`)
+        // A reset would wipe edits made in the copy, so it only clears what the last run left there once prepared.
+        // New files survive a reset, and git diff leaves them out.
+        const { files, print } = await tools.changes(qa.path)
+        if (files && print !== (await loadRecord(c.storage, p.id, persona)).prepared) {
+          throw new Error(`${name}'s copy (${qa.path}) has changes that aren't committed in ${files === 1 ? '1 file' : `${files} files`}. Commit or discard them there, then run again.`)
+        }
         await tools.resetQa(qa.path, p.branch)
       }
       if (!(await still())) return await gone()
@@ -315,9 +318,12 @@ export function makeRuns(c: RunCtx) {
         if (!(await write(p, persona, id, (r) => { r.run.app = { pid: started } }))) return await gone()
         await waitForUrl(config.url.split('{port}').join(String(run.port)), 120_000, pid)
       }
+      // What preparing left in the copy (a rewritten lockfile, say) is the next run's to reset.
+      const prepared = here ? undefined : (await tools.changes(qa.path)).print
       const pointer = await c.serial(async () => {
         const r = await current(p, persona, id)
         if (!r) return null
+        if (prepared !== undefined) r.prepared = prepared
         r.run = advance(r.run!, { type: 'prepared', qa, ...(pid !== undefined && { app: { pid } }) })
         await saveRecord(c.storage, r)
         return prompt(p, persona, r.run, 'run')
