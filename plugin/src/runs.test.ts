@@ -42,7 +42,9 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   /** workspace.list names branches as refs/heads/<name>. */
   refs?: boolean
   /** What `git status --porcelain` says about the project's checkout: its uncommitted files. */
-  status?: string } = {}) {
+  status?: string
+  /** The same for each persona's copy; `--untracked-files=no` leaves out its ?? lines, as git does. */
+  copyStatus?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'studio-runs-')), root = `${dir}-files`, qaRoot = `${dir}-qa`
   cleanup.push(() => { for (const d of [dir, root, qaRoot]) rmSync(d, { recursive: true, force: true }) })
   cpSync(fixture('project'), dir, { recursive: true })
@@ -55,7 +57,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   const agents: { orcaSessionId: string; kind: string; state: string }[] = []
   let sessions = 0
   const ok = (stdout: string) => ({ code: 0, stdout, stderr: '' })
-  const runner: Runner = async (_cmd, args) => {
+  const runner: Runner = async (_cmd, args, opts) => {
     calls.push(args)
     if (args[0] === 'worktree' && args[1] === 'create') {
       await o.hold
@@ -72,7 +74,10 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
       return ok(JSON.stringify({ result: { outcome: { sessionId: `s${n}` } } }))
     }
     if (args[0] === 'agent' && args[1] === 'list') return ok(JSON.stringify({ result: { agents } }))
-    if (args[0] === 'status' && args[1] === '--porcelain') return ok(o.status ?? '')
+    if (args[0] === 'status' && args[1] === '--porcelain') {
+      const out = (opts?.cwd === dir ? o.status : o.copyStatus) ?? ''
+      return ok(args.includes('--untracked-files=no') ? out.split('\n').filter((l) => !l.startsWith('??')).join('\n') : out)
+    }
     return ok('')
   }
   worker.setRunner(runner)
@@ -131,6 +136,21 @@ test('uncommitted changes hold a run back with how many files have them; anyway 
   assert.ok(calls.some((a) => a.join(' ') === 'reset --hard main'))
   assert.equal(calls.some((a) => a.includes('fetch')), false)
   await w.request('run.stop', { project: 'app', persona: 'maya' })
+})
+
+test("a copy with uncommitted changes fails the run without a reset; new files alone don't hold it back", async () => {
+  const held = await setup({ copyStatus: ' M docs/qa/personas/maya.md\nM  src/app.ts\n?? qa-runs/r1/results.json\n' })
+  assert.deepEqual(await start(held.w), { ok: true })
+  await until(async () => (await rowOf(held.w)).error, "Maya's run to fail")
+  const qa = held.made[0].path
+  assert.equal((await rowOf(held.w)).error, `Maya's copy (${qa}) has changes that aren't committed in 2 files. Commit or discard them there, then run again.`)
+  assert.equal(held.calls.some((a) => a.includes('reset')), false)
+  assert.equal(runOf(held.host), undefined)
+  const fine = await setup({ copyStatus: '?? qa-runs/r1/results.json\n' })
+  assert.deepEqual(await start(fine.w), { ok: true })
+  await using(fine.host)
+  assert.ok(fine.calls.some((a) => a.join(' ') === 'reset --hard main'))
+  await fine.w.request('run.stop', { project: 'app', persona: 'maya' })
 })
 
 test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {

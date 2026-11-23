@@ -21,8 +21,8 @@ export interface Tools {
   createWorktree(o: { projectPath: string; name: string; branch: string; base: string; setup: Config['setup'] }): Promise<void>
   /** Reset to the local `branch` as committed. */
   resetQa(path: string, branch: string): Promise<void>
-  /** How many files in the checkout at `path` have changes that aren't committed, new files included. */
-  uncommitted(path: string): Promise<number>
+  /** How many files in the checkout at `path` have changes that aren't committed, new files included unless `tracked`. */
+  uncommitted(path: string, tracked?: boolean): Promise<number>
   createIssue(repo: string, title: string, body: string): Promise<{ number: number; url: string }>
   /** Closes the issue as not planned. */
   closeIssue(repo: string, number: number): Promise<void>
@@ -96,9 +96,9 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
       abs(path)
       await ok(paths.git, ['reset', '--hard', branch], path)
     },
-    async uncommitted(path) {
+    async uncommitted(path, tracked) {
       abs(path)
-      return (await ok(paths.git, ['status', '--porcelain'], path)).split('\n').filter(Boolean).length
+      return (await ok(paths.git, ['status', '--porcelain', ...(tracked ? ['--untracked-files=no'] : [])], path)).split('\n').filter(Boolean).length
     },
     async createIssue(repo, title, body) {
       const g = gh()

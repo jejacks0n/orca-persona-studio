@@ -291,6 +291,9 @@ export function makeRuns(c: RunCtx) {
         }
         qa = { path: ws.path, branch, workspaceId: ws.id }
         if (!(await still())) return await gone()
+        // A reset would wipe edits made in the copy. New files survive it, and the run's own output is one.
+        const changed = await tools.uncommitted(qa.path, true)
+        if (changed) throw new Error(`${name}'s copy (${qa.path}) has changes that aren't committed in ${changed === 1 ? '1 file' : `${changed} files`}. Commit or discard them there, then run again.`)
         await tools.resetQa(qa.path, p.branch)
       }
       if (!(await still())) return await gone()
