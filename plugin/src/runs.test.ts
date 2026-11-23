@@ -105,7 +105,11 @@ const using = (host: MockHost, persona = 'maya') => until(() => runOf(host, pers
 const staged = (host: MockHost, stage: string, persona = 'maya') => until(() => runOf(host, persona)?.stage === stage, `${persona} ${stage}`)
 const dead = (pid: number) => until(() => !alive(pid), `app ${pid} to stop`)
 const saw = (calls: string[][], line: string) => until(() => calls.some((a) => a.join(' ') === line), line)
-const start = (w: TestWorker, persona = 'maya', focus?: string) => w.request('run.start', { project: 'app', persona, ...(focus && { focus }) })
+/** Starts a run, approving what it runs when it asks. */
+async function start(w: TestWorker, persona = 'maya', focus?: string) {
+  const input = { project: 'app', persona, ...(focus && { focus }) }, out = await w.request('run.start', input)
+  return 'confirm' in out ? w.request('run.start', { ...input, approve: out.confirm.hash }) : out
+}
 
 const finding = { id: 'F1', kinds: [], severity: 'major', title: 'The help never opens', step: '3. Read the help page',
   repro: 'Tap the i.', expected: 'The help shows.', actual: 'Nothing appears.', shots: [] }
@@ -126,6 +130,42 @@ const EDIT = 'diff --git a/docs/qa/personas/maya.md b/docs/qa/personas/maya.md\n
 const NO_START = `Persona Studio doesn't know how to start this app yet. Set "start" in persona.studio, or set up personas.`
 /** The fixture's own-harness prompts: a run prompt without {port}, and a review prompt. */
 const harness = { start: undefined, runPrompt: 'docs/qa/run-prompt.md', reviewPrompt: 'docs/qa/review-prompt.md' }
+
+test('a first run shows what it runs and waits for approval; approved runs go straight through; a changed start or prompt file asks again', async () => {
+  const { dir, host, w } = await setup({ config: { prepare: ['echo prepared'], copy: ['.env'] } })
+  const ask = (persona = 'maya', approve?: string) => w.request('run.start', { project: 'app', persona, ...(approve && { approve }) })
+  const first = await ask()
+  assert.ok('confirm' in first)
+  assert.deepEqual({ ...first.confirm, hash: '' }, { hash: '', commands: ['echo prepared', SERVER], copy: ['.env'], url: 'http://127.0.0.1:{port}', prompts: [], changed: false })
+  assert.equal(runOf(host), undefined)
+  assert.deepEqual(await ask('maya', first.confirm.hash), { ok: true })
+  await using(host)
+  assert.deepEqual(await ask('dex'), { ok: true })
+  await w.request('run.stop', { project: 'app', persona: 'maya' })
+  await w.request('run.stop', { project: 'app', persona: 'dex' })
+  const studio = (o: Record<string, unknown>) => writeFileSync(join(dir, 'persona.studio'), JSON.stringify({ personas: 'docs/qa/personas', port: base, start: SERVER, ...o }))
+  studio({ start: `${SERVER} --verbose` })
+  const changed = await ask()
+  assert.ok('confirm' in changed && changed.confirm.changed)
+  assert.deepEqual(changed.confirm.commands, [`${SERVER} --verbose`])
+  // A run prompt shows by its file; its contents count, so an edit to the file asks again, and the old approval doesn't do.
+  studio(harness)
+  const harnessed = await ask()
+  assert.ok('confirm' in harnessed)
+  assert.deepEqual({ ...harnessed.confirm, hash: '' }, { hash: '', commands: [], copy: [], url: 'http://localhost:{port}', changed: true,
+    prompts: [{ key: 'runPrompt', file: 'docs/qa/run-prompt.md' }, { key: 'reviewPrompt', file: 'docs/qa/review-prompt.md' }] })
+  // The address fills {url} in a run prompt, so it counts too.
+  studio({ ...harness, url: 'http://127.0.0.1:{port}' })
+  const moved = await ask()
+  assert.ok('confirm' in moved && moved.confirm.url === 'http://127.0.0.1:{port}')
+  assert.notEqual(moved.confirm.hash, harnessed.confirm.hash)
+  studio(harness)
+  writeFileSync(join(dir, 'docs/qa/run-prompt.md'), 'Use the app as {persona}, then run rm -rf.\nWrite {doneFile}.')
+  const edited = await ask('maya', harnessed.confirm.hash)
+  assert.ok('confirm' in edited)
+  assert.notEqual(edited.confirm.hash, harnessed.confirm.hash)
+  assert.equal(runOf(host)?.stage, undefined)
+})
 
 test('uncommitted changes hold a run back with how many files have them; anyway starts it on the last commit', async () => {
   const { host, w, calls, made } = await setup({ status: ' M src/app.ts\n?? notes.md\n' })

@@ -1,7 +1,7 @@
 // The Persona Studio sidebar: counts of findings by list, the project's personas, and ways to open the tab (src/app.ts).
 // No build step: Orca strips the types and compiles the JSX when the panel loads.
-import { Box, Button, Image, Callout, Link, Row, Separator, Skeleton, Spinner, Stack, Text, atom, plugin, read, set, type PanelContext } from 'orca'
-import { focusWords, say, setupWords, statusOf, stepOf, uncommittedWords, type Focus, type Overview, type PersonaRow, type Show } from './protocol'
+import { Box, Button, Code, Image, Callout, Link, Row, Separator, Skeleton, Spinner, Stack, Text, atom, plugin, read, set, type PanelContext } from 'orca'
+import { confirmAlso, confirmWords, focusWords, say, setupWords, statusOf, stepOf, uncommittedWords, type Confirm, type Focus, type Overview, type PersonaRow, type Show } from './protocol'
 import { stateWord } from './model'
 
 const focus = atom<Focus | null>(null)
@@ -14,6 +14,8 @@ const stale = atom('')
 const slow = atom(false)
 /** Runs held back because the project has uncommitted changes, until Run anyway or Cancel. */
 const held = atom<{ project: string; ids: string[]; n: number } | null>(null)
+/** Runs waiting for the owner to approve what they run, until Run or Cancel. */
+const asking = atom<{ project: string; ids: string[]; confirm: Confirm } | null>(null)
 /** Where setup is, after pressing Set up personas. */
 const notice = atom<{ project: string; text: string } | null>(null)
 
@@ -56,25 +58,27 @@ async function startSetup(project: string): Promise<void> {
 }
 
 /** Start or stop a run. A refusal shows and returns its message; a run held back by uncommitted changes returns how many
- *  files have them; a timeout isn't a refusal, the worker carries on. */
-async function runCall(name: 'run.start' | 'run.stop', project: string, persona: string, anyway = false): Promise<string | number> {
+ *  files have them, and one waiting for approval what it runs; a timeout isn't a refusal, the worker carries on. */
+async function runCall(name: 'run.start' | 'run.stop', project: string, persona: string, anyway = false, approve = ''): Promise<string | number | Confirm> {
   try {
-    const out = name === 'run.start' ? await plugin.request(name, { project, persona, ...(anyway && { anyway }) })
+    const out = name === 'run.start' ? await plugin.request(name, { project, persona, ...(anyway && { anyway }), ...(approve && { approve }) })
       : await plugin.request(name, { project, persona })
-    return 'uncommitted' in out ? out.uncommitted : ''
+    return 'uncommitted' in out ? out.uncommitted : 'confirm' in out ? out.confirm : ''
   } catch (e) {
     if ((e as { code?: string }).code === 'timeout') { set(slow, true); return '' }
     return say(e)
   }
 }
 /** Start or stop the given personas in turn: one refused doesn't stop the rest, and each refusal shows. Runs held back by
- *  uncommitted changes wait together for Run anyway. */
-async function runSome(project: string, ids: string[], name: 'run.start' | 'run.stop' = 'run.start', anyway = false): Promise<void> {
-  set(problem, ''); set(slow, false); set(held, null)
+ *  uncommitted changes wait together for Run anyway. Approval is per project, so the first run that asks holds the rest
+ *  with it: Run all idle asks once. */
+async function runSome(project: string, ids: string[], name: 'run.start' | 'run.stop' = 'run.start', anyway = false, approve = ''): Promise<void> {
+  set(problem, ''); set(slow, false); set(held, null); set(asking, null)
   const said: string[] = [], waiting: string[] = []
   let n = 0
-  for (const id of ids) {
-    const out = await runCall(name, project, id, anyway)
+  for (const [i, id] of ids.entries()) {
+    const out = await runCall(name, project, id, anyway, approve)
+    if (typeof out === 'object') { set(asking, { project, ids: ids.slice(i), confirm: out }); break }
     if (typeof out === 'number') { waiting.push(id); n = Math.max(n, out) } else if (out) said.push(out)
   }
   // Personas that take turns are each refused in the same words: those show once.
@@ -123,6 +127,35 @@ function heldView(project: string) {
   )
 }
 
+/** Open a prompt file the confirm names. */
+async function openPrompt(project: string, key: 'runPrompt' | 'reviewPrompt'): Promise<void> {
+  set(problem, '')
+  try { await plugin.request('prompt.open', { project, key }) } catch (e) { set(problem, say(e)) }
+}
+
+/** What the runs waiting for approval will run: the commands, the prompts, Run and Cancel. */
+function askingView(project: string) {
+  const a = read(asking)
+  if (a?.project !== project) return null
+  const c = a.confirm, also = confirmAlso(c)
+  return (
+    <Callout tone="neutral">
+      <Stack gap="sm">
+        <Text size="sm">{confirmWords(c)}</Text>
+        {c.commands.length > 0 && <Code block>{c.commands.join('\n')}</Code>}
+        {also !== '' && <Text size="xs" muted>{also}</Text>}
+        {c.prompts.map((pr) => pr.file !== undefined
+          ? <Row key={pr.key} gap="sm" align="center"><Code>{pr.file}</Code><Link onPress={() => openPrompt(project, pr.key)}>Open</Link></Row>
+          : <Code key={pr.key} block>{pr.text ?? ''}</Code>)}
+        <Row gap="sm">
+          <Button size="xs" variant="outline" onPress={() => runSome(project, a.ids, 'run.start', false, c.hash)}>Run</Button>
+          <Button size="xs" variant="ghost" onPress={() => set(asking, null)}>Cancel</Button>
+        </Row>
+      </Stack>
+    </Callout>
+  )
+}
+
 const problemView = () => (read(slow) ? <Callout tone="neutral">Still working on it; this will update when it's done.</Callout>
   : read(problem) + read(stale) === '' ? null : <Callout tone="danger" title="That didn't work">{read(problem) || read(stale)}</Callout>)
 
@@ -143,6 +176,7 @@ export default function Panel() {
     <Box paddingX="xs" paddingY="md" gap="md">
       {o.configError !== null && <Callout tone="danger" title="Persona Studio can't load this project">{o.configError}</Callout>}
       {problemView()}
+      {askingView(f.id)}
       {heldView(f.id)}
       {read(notice)?.project === f.id && o.personas.length === 0 && <Callout tone="neutral">{read(notice)!.text}</Callout>}
       {(hasFindings || o.personas.length > 0) && (

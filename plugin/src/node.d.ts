@@ -16,6 +16,9 @@ declare module 'node:fs' {
   export function utimesSync(path: string, atime: number, mtime: number): void
   export function statSync(path: string): { mtimeMs: number; size: number }
 }
+declare module 'node:crypto' {
+  export function createHash(algorithm: 'sha256'): { update(data: string): { digest(encoding: 'hex'): string } }
+}
 declare module 'node:os' {
   export function tmpdir(): string
   export function homedir(): string

@@ -17,10 +17,12 @@ const ask = <K extends keyof PluginRequests>(name: K, input: PluginRequestInput<
 const change = (f: (ui: Ui) => Ui): Act => ({ ui: f })
 const say = (text: string, undo?: string | null) => (ui: Ui): Ui => ({ ...ui, notice: undo ? { text, undo } : { text } })
 const started = (name: string, inPlace = false) => say(inPlace ? `${name} is running in your checkout.` : `${name} is running in its own copy. Carry on with the others.`)
-/** Start a run; uncommitted changes hold it back, and the notice offers Run anyway. */
-const startRun = (project: string, again: RunAgain, anyway = false): Act =>
-  ask('run.start', { project, persona: again.persona, ...(again.focus && { focus: again.focus }), ...(anyway && { anyway }) },
-    (u, out) => ('uncommitted' in out ? { ...u, notice: { text: uncommittedWords(out.uncommitted), anyway: again } } : started(again.name, out.inPlace === true)(u)))
+/** Start a run. Until what it runs is approved, a dialog shows it, and Run sends the approval; uncommitted changes hold
+ *  it back, and the notice offers Run anyway. */
+const startRun = (project: string, again: RunAgain, anyway = false, approve = ''): Act =>
+  ask('run.start', { project, persona: again.persona, ...(again.focus && { focus: again.focus }), ...(anyway && { anyway }), ...(approve && { approve }) },
+    (u, out) => ('confirm' in out ? { ...u, dialog: { type: 'confirm', again, confirm: out.confirm } }
+      : 'uncommitted' in out ? { ...u, notice: { text: uncommittedWords(out.uncommitted), anyway: again } } : started(again.name, out.inPlace === true)(u)))
 const KINDS: readonly string[] = ['all', 'bug', 'missing', 'polish']
 const toggle = (list: readonly string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
 const counted = (word: string, n: number) => (n > 1 ? `${word} ${n}` : word)
@@ -83,6 +85,7 @@ export function actionOf(d: Partial<Record<string, string>>, ui: Ui, ctx: Ctx): 
       return row.runs === 0 ? startRun(project, { persona: row.id, name: row.name })
         : change((u) => ({ ...u, dialog: { type: 'run', persona: row.id, name: row.name, recheck: row.recheck } }))
     }
+    case 'open-prompt': return d.key === 'runPrompt' || d.key === 'reviewPrompt' ? ask('prompt.open', { project, key: d.key }) : null
     case 'edit-persona': return d.persona ? ask('persona.open', { project, persona: d.persona }) : null
     case 'stop': {
       const row = ui.personaDetail?.row
@@ -126,6 +129,7 @@ function submitted(ui: Ui, { project, rows, form = {} }: Ctx): Act {
     const focus = text('focus')
     return startRun(project, { persona: g.persona, name: g.name, ...(focus && { focus }) })
   }
+  if (g.type === 'confirm') return startRun(project, g.again, false, g.confirm.hash)
   if (g.type === 'close') {
     const reason = form.reason as CloseReason
     if (!(reason in reasonWord)) return null

@@ -14,6 +14,8 @@ export async function saveProjects(storage: KV, projects: Project[]): Promise<vo
 }
 
 export const findingsKey = (project: string) => `findings:${project}`
+/** The hash of what a run runs (config.ts runsWhat) that the owner last approved for the project. */
+export const approvalKey = (project: string) => `approval:${project}`
 export const recordKey = (project: string, persona: string) => `record:${project}:${persona}`
 
 /** Null when never stored. */

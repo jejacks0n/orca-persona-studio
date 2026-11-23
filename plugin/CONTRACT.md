@@ -43,6 +43,8 @@ Persona Studio reads files from your project. This page says which, and what sho
 
 When there's no `runPrompt`, Persona Studio uses `start`, `prepare`, `copy`, `url` and `port` to start the app itself, and uses its own run prompt.
 
+These run on your computer, so before a project's first run, and whenever they change, Run shows them and asks first: the commands and files copied, or the `runPrompt` and `reviewPrompt` (a prompt file by its name, and its contents count as a change), and the address.
+
 The setup chat (**Set up personas**) writes `start`, `prepare`, `copy` and, only if needed, `url`, along with the persona files and a portrait beside each. It never commits them.
 
 A field with the wrong type is refused, and the message names the field. So is a prompt file that isn't there.

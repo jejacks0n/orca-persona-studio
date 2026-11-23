@@ -308,6 +308,31 @@ test('a running row shows its script step as n/total, and nothing when the line 
   clean(q)
 })
 
+test('Run all idle asks once for the project, showing what runs, then starts them all with the approval; Cancel drops them', async () => {
+  const started: { persona: string; approve?: string }[] = [], opened: unknown[] = []
+  const confirm = { hash: 'h1', commands: ['npm ci', 'npm run dev -- --port {port}'], copy: ['.env'], url: 'http://localhost:{port}',
+    prompts: [{ key: 'reviewPrompt', file: 'docs/qa/review.md' }], changed: false }
+  const { host } = boot(project, running, { 'run.start': (i: { persona: string; approve?: string }) => { started.push(i); return i.approve === 'h1' ? { ok: true } : { confirm } },
+    'prompt.open': (i: unknown) => { opened.push(i); return { ok: true } } })
+  const p = await mount(panel, { host })
+  await p.press({ type: 'Button', text: 'Run all idle' })
+  assert.deepEqual(started, [{ project: 'app', persona: 'maya' }])
+  assert.ok(p.find({ text: 'First run in this project: Persona Studio runs these on your computer.' }))
+  assert.ok(p.find({ type: 'Code', text: 'npm ci\nnpm run dev -- --port {port}' }))
+  assert.ok(p.find({ text: 'Copies .env · opens http://localhost:{port}' }))
+  await p.press({ type: 'Link', text: 'Open' })
+  assert.deepEqual(opened, [{ project: 'app', key: 'reviewPrompt' }])
+  await p.press({ type: 'Button', text: 'Run' })
+  assert.deepEqual(started.slice(1), ['maya', 'lea', 'walt'].map((persona) => ({ project: 'app', persona, approve: 'h1' })))
+  assert.equal(p.find({ text: /First run in this project/ }), null)
+  started.length = 0
+  await p.press({ type: 'Button', text: 'Run all idle' })
+  await p.press({ type: 'Button', text: 'Cancel' })
+  assert.equal(p.find({ text: /First run in this project/ }), null)
+  assert.equal(started.length, 1)
+  clean(p)
+})
+
 test('uncommitted changes hold Run and Run all idle back with Run anyway; Cancel drops them', async () => {
   const started: unknown[] = []
   const { host } = boot(project, running, { 'run.start': (i: { anyway?: boolean }) => { started.push(i); return i.anyway ? { ok: true } : { uncommitted: 1 } } })

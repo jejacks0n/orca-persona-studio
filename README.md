@@ -153,7 +153,7 @@ A persona is a Markdown file with a `# Name: tag` heading and `## Who`, `## Goal
 - **Your project:** `persona.studio` is the only file Persona Studio adds there. The persona files are written by the setup chat, and you commit them. With `"worktrees": false`, run output also lands in `runsDir` in your checkout.
 - **Its own folder:** its working files, such as each finding's brief and notes, the prompts it hands to agents, and run logs, live in `~/.persona-studio/<project>/`. They stay after you uninstall, so delete the folder to remove them.
 - **Worktrees:** each persona gets an Orca worktree on the branch `studio/qa-<persona>` (or `studio/qa-<folder>-<persona>` when you run from another worktree), and each **Start work** makes one more.
-- **Commands:** it runs `start` and `prepare` from `persona.studio` with `sh`, and drives Orca, git and gh through their command-line tools.
+- **Commands:** it runs `start` and `prepare` from `persona.studio` with `sh`, and drives Orca, git and gh through their command-line tools. Before a project's first run, and whenever they change, Run shows those commands, or your `runPrompt` and `reviewPrompt`, and asks first.
 - **The network:** Persona Studio sends nothing off your machine itself. Only git and gh do, for fetches, issues and pull request checks. The agent chats it starts are Orca's, like any other chat.
 
 ## Using it
