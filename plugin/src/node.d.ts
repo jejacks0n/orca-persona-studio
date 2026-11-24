@@ -46,6 +46,9 @@ declare module 'node:child_process' {
     callback: (error: { code?: number | string | null; killed?: boolean; message: string } | null, stdout: string, stderr: string) => void,
   ): unknown
 }
+declare module 'node:crypto' {
+  export function createHash(algorithm: 'sha256'): { update(data: string): { digest(encoding: 'hex'): string } }
+}
 declare module 'node:net' {
   export function createServer(): {
     once(event: 'error', listener: () => void): unknown

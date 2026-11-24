@@ -134,6 +134,7 @@ test('an empty or relative path is refused before any command runs', async () =>
     for (const call of [
       () => f.tools.resetQa(p, 'main'),
       () => f.tools.uncommitted(p),
+      () => f.tools.changes(p),
       () => f.tools.mainCheckout(p),
       () => f.tools.headOf(p, 'HEAD'),
       () => f.tools.remoteUrl(p),

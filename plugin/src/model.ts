@@ -30,5 +30,7 @@ export interface ActiveRun { id: string; stage: RunStage; at: number; seed: numb
   recheck: string[]; qa?: { path: string; branch: string; workspaceId: string }; app?: { pid: number }
   task?: RunTask; results?: { path: string; at: number } }
 export interface PersonaRecord { v: 2; project: string; persona: string; runs: RunRecord[]
-  run?: ActiveRun; error?: { at: number; text: string } }
+  run?: ActiveRun; error?: { at: number; text: string }
+  /** A sha256 of the tracked changes the last run left in the persona's copy once it was prepared; empty when none. */
+  prepared?: string }
 export const emptyFindings = (project: string): ProjectFindings => ({ v: 2, project, next: 1, findings: [] })

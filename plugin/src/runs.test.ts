@@ -51,11 +51,13 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
     start: SERVER, ...o.config }))
   worker.setFilesRoot(root)
   const calls: string[][] = [], made: { name: string; path: string; branch: string }[] = []
+  /** `git diff HEAD --binary` in each copy: a reset clears it, and a prepare of `npm install` rewrites the lockfile. */
+  const diffs: Record<string, string> = {}
   /** What `orca agent list` answers. */
   const agents: { orcaSessionId: string; kind: string; state: string }[] = []
   let sessions = 0
   const ok = (stdout: string) => ({ code: 0, stdout, stderr: '' })
-  const runner: Runner = async (_cmd, args) => {
+  const runner: Runner = async (_cmd, args, opts) => {
     calls.push(args)
     if (args[0] === 'worktree' && args[1] === 'create') {
       await o.hold
@@ -73,6 +75,9 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
     }
     if (args[0] === 'agent' && args[1] === 'list') return ok(JSON.stringify({ result: { agents } }))
     if (args[0] === 'status' && args[1] === '--porcelain') return ok(o.status ?? '')
+    if (args[0] === 'reset') diffs[opts!.cwd!] = ''
+    if (args[0] === '-c' && args[1] === 'npm install') diffs[opts!.cwd!] = LOCK
+    if (args[0] === 'diff') return ok(diffs[opts!.cwd!] ?? '')
     return ok('')
   }
   worker.setRunner(runner)
@@ -82,7 +87,7 @@ async function setup(o: { config?: Record<string, unknown>; findings?: Finding[]
   const host = mockHost(opts({ projects: [{ id: 'app', name: 'app', path: dir, branch: 'main' }],
     'findings:app': json({ v: 2, project: 'app', next: (o.findings?.length ?? 0) + 1, findings: o.findings ?? [] }), ...o.storage }))
   const w = await mount(host)
-  return { dir, files: join(root, 'app'), host, w, calls, made, opts, agents }
+  return { dir, files: join(root, 'app'), host, w, calls, made, opts, agents, diffs }
 }
 async function mount(host: MockHost): Promise<TestWorker> {
   hosts.push(host)
@@ -116,6 +121,8 @@ function done(files: string, taskId: string, v: unknown) {
   mkdirSync(join(files, 'tasks'), { recursive: true })
   writeFileSync(doneFilePath(files, taskId), typeof v === 'string' ? v : JSON.stringify(v))
 }
+const LOCK = 'diff --git a/package-lock.json b/package-lock.json\n-  "version": "1"\n+  "version": "2"\n'
+const EDIT = 'diff --git a/docs/qa/personas/maya.md b/docs/qa/personas/maya.md\n+More about Maya.\n'
 const NO_START = `Persona Studio doesn't know how to start this app yet. Set "start" in persona.studio, or set up personas.`
 /** The fixture's own-harness prompts: a run prompt without {port}, and a review prompt. */
 const harness = { start: undefined, runPrompt: 'docs/qa/run-prompt.md', reviewPrompt: 'docs/qa/review-prompt.md' }
@@ -131,6 +138,41 @@ test('uncommitted changes hold a run back with how many files have them; anyway 
   assert.ok(calls.some((a) => a.join(' ') === 'reset --hard main'))
   assert.equal(calls.some((a) => a.includes('fetch')), false)
   await w.request('run.stop', { project: 'app', persona: 'maya' })
+})
+
+test("a run resets what preparing left in the copy, but not a change made there after", async () => {
+  const { host, w, calls, made, diffs } = await setup({ config: { prepare: ['npm install'] } })
+  const resets = () => calls.filter((a) => a[0] === 'reset').length
+  const again = async () => {
+    assert.deepEqual(await start(w), { ok: true })
+    await using(host)
+    await w.request('run.stop', { project: 'app', persona: 'maya' })
+  }
+  await again()
+  const qa = made[0].path
+  assert.equal(diffs[qa], LOCK)
+  // Its own rewritten lockfile doesn't hold the next run back.
+  await again()
+  assert.equal(resets(), 2)
+  diffs[qa] = LOCK + EDIT
+  assert.deepEqual(await start(w), { ok: true })
+  await until(async () => (await rowOf(w)).error, "Maya's run to fail")
+  assert.equal((await rowOf(w)).error, `Maya's copy (${qa}) has changes that aren't committed in 2 files. Commit or discard them there, then run again.`)
+  assert.equal(resets(), 2)
+  // Discarded, with new files left there, it runs again.
+  diffs[qa] = ''
+  await again()
+  assert.equal(resets(), 3)
+})
+
+test('what preparing left in the copy is still reset after a run whose app never came up', async () => {
+  const { w, calls } = await setup({ config: { prepare: ['npm install'], start: 'exit 1' } })
+  for (const n of [1, 2]) {
+    assert.deepEqual(await start(w), { ok: true })
+    await until(async () => (await rowOf(w)).error, `run ${n} to fail`)
+    assert.match((await rowOf(w)).error!, /^The app stopped before it answered/)
+    assert.equal(calls.filter((a) => a[0] === 'reset').length, n)
+  }
 })
 
 test('with worktrees off, a run uses the checkout as it is: no worktree, reset, copy or prepare, uncommitted changes and all, one persona at a time', async () => {

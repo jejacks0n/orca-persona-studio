@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
@@ -23,6 +24,8 @@ export interface Tools {
   resetQa(path: string, branch: string): Promise<void>
   /** How many files in the checkout at `path` have changes that aren't committed, new files included. */
   uncommitted(path: string): Promise<number>
+  /** The checkout's changes to tracked files: how many files, and a sha256 of their diff, empty when there are none. */
+  changes(path: string): Promise<{ files: number; print: string }>
   createIssue(repo: string, title: string, body: string): Promise<{ number: number; url: string }>
   /** Closes the issue as not planned. */
   closeIssue(repo: string, number: number): Promise<void>
@@ -99,6 +102,12 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
     async uncommitted(path) {
       abs(path)
       return (await ok(paths.git, ['status', '--porcelain'], path)).split('\n').filter(Boolean).length
+    },
+    async changes(path) {
+      abs(path)
+      // ponytail: the diff is read whole, so one over the runner's 10 MB fails the run; hash it in a stream if that bites.
+      const diff = await ok(paths.git, ['diff', 'HEAD', '--binary', '--no-color', '--no-ext-diff'], path)
+      return { files: diff.split('\n').filter((l) => l.startsWith('diff --git ')).length, print: diff && createHash('sha256').update(diff).digest('hex') }
     },
     async createIssue(repo, title, body) {
       const g = gh()
