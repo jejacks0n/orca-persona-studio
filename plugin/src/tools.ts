@@ -41,6 +41,8 @@ export interface Tools {
   chats(worktreePath: string): Promise<{ session: string; state: string; title: string }[]>
   sendToChat(session: string, subject: string, body: string): Promise<void>
   renameChat(session: string, name: string): Promise<void>
+  /** The branch the checkout at `path` is on now; null when it's on none (a detached HEAD). */
+  branchOf(path: string): Promise<string | null>
   /** The commit `ref` points to. */
   headOf(path: string, ref: string): Promise<string>
   /** Whether `branch` has moved off `start` and its head is now in origin's `base`. Throws when the fetch fails. */
@@ -163,6 +165,15 @@ export function makeTools(run: Runner, paths: { orca: string; gh: string | null;
     },
     async renameChat(session, name) {
       await ok(paths.orca, ['chat', 'rename', '--session', session, '--name', name])
+    },
+    async branchOf(path) {
+      abs(path)
+      const args = ['-C', path, 'symbolic-ref', '--quiet', '--short', 'HEAD']
+      const r = await run(paths.git, args)
+      // With --quiet, git exits 1 only for a detached HEAD.
+      if (r.code === 1) return null
+      if (r.code !== 0) throw fail(paths.git, args, r)
+      return r.stdout.trim()
     },
     headOf,
     async mergedInto(path, o) {

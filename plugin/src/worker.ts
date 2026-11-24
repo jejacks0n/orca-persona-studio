@@ -18,7 +18,7 @@ import { STATES, emptyFindings, stateWord, type Finding, type ProjectFindings, t
 import { focusWords, say, type Focus, type PersonaRow, type Show } from './protocol'
 import { stageWord } from './run'
 import { freePort } from './serve'
-import { canRun, findWorkspace, invalid, makeRuns, recheckOf } from './runs'
+import { branchNow, canRun, findWorkspace, invalid, makeRuns, recheckOf } from './runs'
 import { parseSheet } from './sheet'
 import { approvalKey, loadFindings, loadProjects, loadRecord, saveFindings, saveProjects } from './store'
 import { progressLines, promptFile } from './tasks'
@@ -468,7 +468,8 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   handle('work.draft', ({ project, ids }) => serial(async () => {
     const p = await projectOf(project), pf = await findingsOf(p), fs = ids.map((id) => findingIn(pf, id))
-    return { name: workName(fs), base: p.branch, brief: workBrief(p, fs, p.branch), autoBrief: workBrief(p, fs, p.branch, true) }
+    const base = await branchNow((await env()).tools, p, 'try again')
+    return { name: workName(fs), base, brief: workBrief(p, fs, base), autoBrief: workBrief(p, fs, base, true) }
   }))
 
   /** By project and finding: work whose worktree is still being made. */
@@ -611,6 +612,11 @@ export default function activate(orca: OrcaWorkerApi): void {
       for (let n = 2; projects.some((x) => x.id === id); n++) id = `${wt.id}-${n}`
       p = { id, name: f.name, path: f.path, branch: f.branch }
       await saveProjects(storage, [...projects, p])
+    } else if (f.branch && p.branch !== f.branch) {
+      // The checkout moved to another branch: the id stays, since stored data is keyed by it.
+      const q = { ...p, branch: f.branch }
+      await saveProjects(storage, projects.map((x) => (x === p ? q : x)))
+      p = q
     }
     return { ...(await focusOf(p)), path: f.path }
   }

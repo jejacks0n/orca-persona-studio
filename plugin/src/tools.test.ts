@@ -137,6 +137,7 @@ test('an empty or relative path is refused before any command runs', async () =>
       () => f.tools.changes(p),
       () => f.tools.mainCheckout(p),
       () => f.tools.headOf(p, 'HEAD'),
+      () => f.tools.branchOf(p),
       () => f.tools.remoteUrl(p),
     ]) {
       let err: unknown
@@ -189,6 +190,14 @@ test('sendToChat and renameChat run their orca commands', async () => {
     ['orchestration', 'send', '--to', 'orca_session_id:s1', '--subject', 'Subj', '--body', 'Body', '--json'],
     ['chat', 'rename', '--session', 's1', '--name', 'Name'],
   ])
+})
+
+test('branchOf is the branch git says the checkout is on; null for a detached HEAD', async () => {
+  const f = fake([{ stdout: 'feature-x\n' }, { code: 1 }, { code: 128, stderr: 'fatal: not a git repository' }])
+  assert.equal(await f.tools.branchOf('/w'), 'feature-x')
+  assert.deepEqual(f.calls[0], { cmd: 'git', args: ['-C', '/w', 'symbolic-ref', '--quiet', '--short', 'HEAD'], cwd: undefined })
+  assert.equal(await f.tools.branchOf('/w'), null)
+  await assert.rejects(f.tools.branchOf('/w'), /not a git repository/)
 })
 
 test('headOf gives the trimmed commit', async () => {
