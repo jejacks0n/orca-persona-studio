@@ -6,7 +6,7 @@ import { homedir } from 'node:os'
 import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import type { PluginPanelEvents } from 'orca'
 import type { OrcaWorkerApi } from 'orca/worker'
-import { CONFIG_FILE, inPlace, listPersonas, parseConfig, portraitOf, promptOf, readConfig } from './config'
+import { CONFIG_FILE, inPlace, listPersonas, parseConfig, portraitOf, promptOf, promptPath, readConfig, runsWhat, type Config } from './config'
 import { isMet, series } from './goals'
 import { act } from './finding'
 import { findingDir, mergeNotes, notesChangedSince, readNotes, writeBrief, writeNotes } from './finding-files'
@@ -20,7 +20,7 @@ import { stageWord } from './run'
 import { freePort } from './serve'
 import { canRun, findWorkspace, invalid, makeRuns, recheckOf } from './runs'
 import { parseSheet } from './sheet'
-import { loadFindings, loadProjects, loadRecord, saveFindings, saveProjects } from './store'
+import { approvalKey, loadFindings, loadProjects, loadRecord, saveFindings, saveProjects } from './store'
 import { progressLines, promptFile } from './tasks'
 import { NO_GH, makeTools, nodeRunner, type Runner, type Tools } from './tools'
 import type { Project } from './types'
@@ -353,18 +353,34 @@ export default function activate(orca: OrcaWorkerApi): void {
     const here = f?.kind === 'project' && f.path ? join(f.path, relative(p.path, s.sheetPath)) : ''
     return openFile(here && existsSync(here) ? here : s.sheetPath, `${s.name}'s persona file isn't in a workspace Orca has open.`)
   })
-  // A run in its own copy tests the last commit, so uncommitted changes would silently miss it: say so first, unless told
-  // to run anyway. One in the project's own checkout tests them as they are. A config that doesn't load is runs.start's to refuse.
-  handle('run.start', async ({ project, persona, focus, anyway }) => {
+  // persona.studio comes with the project, so what a run runs from it is shown first: before the project's first run, and
+  // whenever it changes. A run in its own copy tests the last commit, so uncommitted changes would silently miss it: say so
+  // first, unless told to run anyway. One in the project's own checkout tests them as they are. A config that doesn't load,
+  // or has nothing to run, is runs.start's to refuse.
+  handle('run.start', async ({ project, persona, focus, anyway, approve }) => {
     const p = await projectOf(project)
-    let here = false
-    try { here = inPlace(readConfig(p.path)) } catch { /* refused below */ }
+    let config: Config | undefined
+    try { config = readConfig(p.path) } catch { /* refused below */ }
+    if (config && (config.start || config.runPrompt)) {
+      const what = runsWhat(p.path, config), had = await storage.get(approvalKey(p.id))
+      if (had !== what.hash) {
+        if (approve !== what.hash) return { confirm: { ...what, changed: had !== null } }
+        await storage.set(approvalKey(p.id), what.hash)
+      }
+    }
+    const here = config !== undefined && inPlace(config)
     if (!anyway && !here) {
       const uncommitted = await (await env()).tools.uncommitted(p.path)
       if (uncommitted > 0) return { uncommitted }
     }
     await runs.start(p, persona, focus)
     return here ? { ok: true as const, inPlace: true as const } : ok
+  })
+  handle('prompt.open', async ({ project, key }) => {
+    const p = await projectOf(project), value = key === 'runPrompt' || key === 'reviewPrompt' ? readConfig(p.path)[key] : undefined
+    const file = value && promptPath(value)
+    if (!file) throw invalid(`${CONFIG_FILE} doesn't name a prompt file for "${key}".`)
+    return openFile(resolve(p.path, file), `${file} isn't in a workspace Orca has open.`)
   })
   handle('run.stop', async ({ project, persona }) => { await runs.stop(await projectOf(project), persona); return ok })
   // ponytail: Orca can't focus one chat tab, only show its workspace; the tab says which chat to look at.

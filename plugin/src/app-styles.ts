@@ -207,6 +207,7 @@ export const STYLES = `
   .radio input, .check input { margin-top: 2px; }
   .check { margin-top: 8px; }
   .brief { border: 1px solid var(--orca-border); border-radius: calc(var(--orca-radius) - 2px); background: var(--orca-background); padding: 8px 10px; font-size: 12px; white-space: pre-wrap; max-height: 150px; overflow: auto; }
+  .brief.cmds { margin-top: 12px; } .brief.cmds + .brief.cmds { margin-top: 6px; }
   .dfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

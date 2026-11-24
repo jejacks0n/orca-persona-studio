@@ -3,7 +3,7 @@
 // src/app-styles.ts lays its children out (header, list, detail, notice bar) wherever they sit in it.
 import { counts, rows, type Filter, type Row } from './findings-view'
 import { reasonWord, severityWord, stateWord, STATES, type CloseReason, type FindingState, type Kind } from './model'
-import { CONTRACT_URL, statusOf, type Detail, type Overview, type PersonaDetail, type ReportView } from './protocol'
+import { CONTRACT_URL, confirmAlso, confirmWords, statusOf, type Confirm, type Detail, type Overview, type PersonaDetail, type ReportView } from './protocol'
 import { SAMPLE_PORTRAITS } from './samples'
 import { drawTrend, esc, type Trend } from './trends-draw'
 
@@ -15,7 +15,7 @@ export interface Ui { tab: FindingState; persona: string | null; kind: Kind | 'a
   picked: string[]; anchor?: string; view: 'list' | 'detail'; notice: { text: string; undo?: string; anyway?: RunAgain } | null
   /** `opened`: a finding was opened from the list, so it shows instead of the chosen persona's pane (`personaDetail`). */
   opened: boolean; personaDetail: PersonaDetail | null
-  dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string }
+  dialog: null | { type: 'run'; persona: string; name: string; recheck: number } | { type: 'confirm'; again: RunAgain; confirm: Confirm } | { type: 'close'; ids: string[] } | { type: 'group'; ids: string[] } | { type: 'issue'; title: string; body: string; notes: string } | { type: 'work'; ids: string[]; name: string; base: string; brief: string; autoBrief: string } | { type: 'shot'; url: string }
   notes: { text: string; base: number; dirty: boolean } | null; problem: string }
 export const freshUi = (): Ui => ({ tab: 'new', persona: null, kind: 'all', q: '', open: null, picked: [], view: 'list',
   opened: false, personaDetail: null, notice: null, dialog: null, notes: null, problem: '' })
@@ -197,7 +197,7 @@ const check = (fieldName: string, label: string, checked: boolean) =>
 const text = (label: string, fieldName: string, value = '') =>
   `<label class="field"><span>${esc(label)}</span><input type="text" data-field="${fieldName}" value="${esc(value)}" autocomplete="off"></label>`
 
-/** The open dialog, if any: Run again, Close, Group, Start work, Make an issue, or a screenshot enlarged. */
+/** The open dialog, if any: Run again, what a run runs, Close, Group, Start work, Make an issue, or a screenshot enlarged. */
 export function dialog(ui: Ui, all: readonly Row[]): string {
   const g = ui.dialog
   if (!g) return ''
@@ -207,6 +207,13 @@ export function dialog(ui: Ui, all: readonly Row[]): string {
     body = `<h2 id="dlg-title">Run ${esc(g.name)} again</h2><p class="dim">${n ? `${esc(g.name)} first rechecks ${n} fix${n > 1 ? 'es' : ''} merged since the last run, then looks for what&#39;s new.`
       : `${esc(g.name)} looks for what&#39;s new since the last run.`}</p>`
       + `<label class="field"><span>Anything to focus on? (optional)</span><textarea data-field="focus" rows="3" autofocus></textarea></label>${foot('Run')}`
+  } else if (g.type === 'confirm') {
+    const c = g.confirm, also = confirmAlso(c)
+    body = `<h2 id="dlg-title">${c.commands.length ? 'Run these commands?' : 'Run with these prompts?'}</h2><p class="dim">${esc(confirmWords(c))}</p>`
+      + (c.commands.length ? `<div class="brief mono cmds">${esc(c.commands.join('\n'))}</div>` : '') + (also ? `<p class="hint">${esc(also)}</p>` : '')
+      + c.prompts.map((p) => p.file !== undefined
+        ? `<div class="brief cmds line"><span class="mono">${esc(p.file)}</span>${btn('Open', { 'data-do': 'open-prompt', 'data-key': p.key }, 'linkish push')}</div>`
+        : `<div class="brief mono cmds">${esc(p.text ?? '')}</div>`).join('') + foot('Run')
   } else if (g.type === 'close') {
     const n = g.ids.length, hasIssue = all.some((r) => g.ids.includes(r.id) && r.issue !== undefined)
     body = `<h2 id="dlg-title">${n > 1 ? `Close ${n} findings` : 'Close this finding'}</h2>`

@@ -268,6 +268,18 @@ test('the run dialog sends run.start with the trimmed focus, and leaves it out w
   assert.deepEqual(request(act({ do: 'submit' }, u, { focus: '   ' })).request.input, { project: 'p1', persona: 'dex' })
 })
 
+test('a run waiting for approval shows what it runs in a dialog, whose Run re-sends with the approval and keeps the focus; Open opens a prompt file', () => {
+  const u = ui({ dialog: { type: 'run', persona: 'dex', name: 'Dex', recheck: 0 } })
+  const confirm = { hash: 'h1', commands: [], copy: [], prompts: [{ key: 'runPrompt' as const, file: 'docs/qa/run.md' }], changed: true }
+  const asked = request(act({ do: 'submit' }, u, { focus: 'the export' })).then!(u, { confirm })
+  assert.deepEqual(asked.dialog, { type: 'confirm', again: { persona: 'dex', name: 'Dex', focus: 'the export' }, confirm })
+  const sent = request(act({ do: 'submit' }, asked))
+  assert.deepEqual(sent.request, { name: 'run.start', input: { project: 'p1', persona: 'dex', focus: 'the export', approve: 'h1' } })
+  assert.equal(sent.then!(asked, { ok: true }).notice?.text, 'Dex is running in its own copy. Carry on with the others.')
+  assert.deepEqual(request(act({ do: 'open-prompt', key: 'runPrompt' }, asked)).request, { name: 'prompt.open', input: { project: 'p1', key: 'runPrompt' } })
+  assert.equal(act({ do: 'open-prompt', key: 'builderBrief' }, asked), null)
+})
+
 test('uncommitted changes hold a run back in the notice, with Run anyway, which keeps the focus', () => {
   const u = ui({ dialog: { type: 'run', persona: 'dex', name: 'Dex', recheck: 0 } })
   const a = request(act({ do: 'submit' }, u, { focus: 'the export' }))

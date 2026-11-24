@@ -1,4 +1,5 @@
 // The worker's contract with the sidebar panel and the tab, declared once: src/panel.tsx, src/app*.ts and src/worker.ts read it.
+import type { RunsWhat } from './config'
 import type { Action } from './finding'
 import type { Row } from './findings-view'
 import type { Finding, FindingState, Report } from './model'
@@ -20,6 +21,15 @@ export const setupWords = (existing: boolean): string => (existing ? 'Setup is a
 /** Why a run held back, and what to do: commit, or run anyway on the last commit. */
 export const uncommittedWords = (n: number): string =>
   `${n === 1 ? '1 file has' : `${n} files have`} uncommitted changes. Commit them first, or run anyway to test your last commit.`
+/** What a run will run, shown before its first run in a project and whenever it changes. `changed`: it was approved before. */
+export type Confirm = RunsWhat & { changed: boolean }
+/** Why Run asks first. */
+export const confirmWords = (c: Confirm): string => c.commands.length
+  ? (c.changed ? 'These changed since you last ran this project. Persona Studio runs them on your computer.' : 'First run in this project: Persona Studio runs these on your computer.')
+  : (c.changed ? 'These prompts changed since you last ran this project. An agent follows them on your computer and can run commands.'
+    : 'First run in this project: an agent follows these prompts on your computer and can run commands.')
+/** The files copied and the address a run opens, in one line. */
+export const confirmAlso = (c: Confirm): string => c.copy.length ? `Copies ${c.copy.join(', ')} · opens ${c.url}` : `Opens ${c.url}`
 /** An error in its own words. */
 export const say = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
@@ -89,8 +99,12 @@ declare module 'orca' {
     /** One worktree for all of `ids`, named `name`; or with `each`, one each, named from its title (`name` unused). `autoPr`: each agent opens its PR when done. */
     'work.start': { input: { project: string; ids: string[]; name: string; base: string; each?: boolean; autoPr?: boolean }; output: { ok: true } }
     'tick': { output: { ok: true } }
-    /** Without `anyway`, a checkout with uncommitted changes doesn't start: it answers how many files have them. */
-    'run.start': { input: { project: string; persona: string; focus?: string; anyway?: boolean }; output: { ok: true; inPlace?: true } | { uncommitted: number } }
+    /** Until the owner approves what a run runs (`approve`: the hash a `confirm` answer gave), it doesn't start: it answers
+     *  what will run. Without `anyway`, a checkout with uncommitted changes doesn't start: it answers how many files have them. */
+    'run.start': { input: { project: string; persona: string; focus?: string; anyway?: boolean; approve?: string }
+      output: { ok: true; inPlace?: true } | { uncommitted: number } | { confirm: Confirm } }
+    /** Open the run or review prompt file that persona.studio names in Orca's editor. */
+    'prompt.open': { input: { project: string; key: 'runPrompt' | 'reviewPrompt' }; output: { ok: true } }
     'run.stop': { input: { project: string; persona: string }; output: { ok: true } }
     'run.watch': { input: { project: string; persona: string }; output: { ok: true } }
     'persona.get': { input: { project: string; persona: string }; output: PersonaDetail }

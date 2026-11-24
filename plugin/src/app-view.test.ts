@@ -132,6 +132,11 @@ test('text with markup in a title, a report and the notes is escaped', () => {
   assert.ok(!dialog(ui({ dialog: { type: 'group', ids: ['a', 'b'] } }), [row('a', { title: x }), row('b')]).includes(x))
   assert.ok(!dialog(ui({ dialog: { type: 'issue', title: x, body: x, notes: x } }), []).includes(x))
   assert.ok(!dialog(ui({ dialog: { type: 'work', ids: ['a'], name: x, base: x, brief: x, autoBrief: x } }), []).includes(x))
+  // What a run runs comes from the project's persona.studio.
+  const confirm = { hash: 'h', commands: [x], copy: [x], url: x, prompts: [{ key: 'runPrompt' as const, file: x }, { key: 'reviewPrompt' as const, text: x }], changed: false }
+  assert.ok(!dialog(ui({ dialog: { type: 'confirm', again: { persona: 'a', name: x }, confirm } }), []).includes(x))
+  // With no files to copy, the address line still starts with a capital.
+  assert.ok(dialog(ui({ dialog: { type: 'confirm', again: { persona: 'a', name: 'A' }, confirm: { ...confirm, copy: [], url: 'http://localhost:{port}' } } }), []).includes('>Opens http://localhost:{port}<'))
 })
 
 test('the close dialog offers the four reasons with "Won\'t fix" checked; the group dialog lists the picked titles; the issue dialog has an editable body and an unticked "Include my notes"', () => {

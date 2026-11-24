@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 
@@ -45,13 +46,34 @@ export function parseConfig(json: unknown): Config {
 /** Whether runs use the project's own checkout instead of a worktree per persona. */
 export const inPlace = (config: Config): boolean => !config.worktrees
 
+/** The file a prompt field names: one line ending in .md. Anything else is the prompt itself. */
+export const promptPath = (value: string): string | undefined => (value.includes('\n') || !value.trim().endsWith('.md') ? undefined : value.trim())
+
 /** A prompt field's text. One line ending in .md is a file in the project, read now; anything else is the prompt itself. */
 export function promptOf(projectPath: string, key: typeof PROMPTS[number], value: string): string {
-  if (value.includes('\n') || !value.trim().endsWith('.md')) return value
-  const path = value.trim(), file = resolve(projectPath, path), rel = relative(projectPath, file)
+  const path = promptPath(value)
+  if (!path) return value
+  const file = resolve(projectPath, path), rel = relative(projectPath, file)
   if (rel.startsWith('..') || resolve(rel) === rel) throw new Error(`${CONFIG_FILE}: "${key}" must name a file inside the project`)
   if (!existsSync(file)) throw new Error(`${CONFIG_FILE}: "${key}" names ${path}, which isn't there`)
   return readFileSync(file, 'utf8')
+}
+
+/** What a run runs from persona.studio, for the owner to see first: the commands and files copied without a run prompt,
+ *  the address, and the prompts (a file by its name). `hash` covers start, prepare, copy, url and the prompts as written,
+ *  each prompt file by its contents, and what's shown. */
+export interface RunsWhat { hash: string; commands: string[]; copy: string[]; url: string; prompts: { key: 'runPrompt' | 'reviewPrompt'; file?: string; text?: string }[] }
+export function runsWhat(projectPath: string, config: Config): RunsWhat {
+  // With a run prompt, the agent starts the app; in the project's own checkout, copy and prepare are skipped.
+  const own = !config.runPrompt, here = inPlace(config)
+  const commands = own ? [...(here ? [] : config.prepare), ...(config.start ? [config.start] : [])] : [], copy = own && !here ? config.copy : []
+  const prompts = (['runPrompt', 'reviewPrompt'] as const).filter((key) => config[key] !== undefined).map((key) => {
+    const file = promptPath(config[key]!)
+    return file ? { key, file } : { key, text: config[key]! }
+  })
+  const seen = JSON.stringify([config.start ?? null, config.prepare, config.copy, config.url, config.runPrompt ?? null, config.reviewPrompt ?? null,
+    prompts.map((p) => promptOf(projectPath, p.key, config[p.key]!)), commands, copy])
+  return { hash: createHash('sha256').update(seen).digest('hex'), commands, copy, url: config.url, prompts }
 }
 
 /** Reads <path>/persona.studio from the working copy; missing or blank is the defaults; a broken one, or a prompt file
