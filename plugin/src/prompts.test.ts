@@ -83,6 +83,7 @@ test('PORTRAIT_PROMPT says how to draw a portrait, and setup includes it', () =>
     assert.ok(PORTRAIT_PROMPT.includes(s), s)
   }
   assert.deepEqual(PORTRAIT_PROMPT.match(/\{\w+\}/g), null)
+  assert.ok(!PORTRAIT_PROMPT.includes('go by the name'), 'gender comes from the pronouns, never the name')
 })
 
 test('SETUP_PROMPT makes personas for an app that isn\'t a web app, skips starting it, and points at the contract', () => {
