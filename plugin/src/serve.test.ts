@@ -14,19 +14,21 @@ const listening = (port: number) => new Promise<boolean>((done) => {
   s.listen(port, '127.0.0.1', () => s.close(() => done(false)))
 })
 
+// Another test run (another worktree's, say) may hold any of these ports, so each test asks freePort for its own.
 test('freePort skips taken ports and ports something listens on', async () => {
-  assert.equal(await freePort(BASE, [BASE]), BASE + 1)
+  const p = await freePort(BASE, [])
+  assert.ok((await freePort(p, [p])) > p)
   const s = createServer()
-  await new Promise<void>((r) => s.listen(BASE + 10, '127.0.0.1', () => r()))
+  await new Promise<void>((r) => s.listen(p, '127.0.0.1', () => r()))
   try {
-    assert.equal(await freePort(BASE + 10, []), BASE + 11)
+    assert.ok((await freePort(p, [])) > p)
   } finally {
     await new Promise<void>((r) => s.close(() => r()))
   }
 })
 
 test('startApp, waitForUrl, alive and stopApp run a real server and leave the port free', async () => {
-  const dir = tmp(), port = BASE + 20
+  const dir = tmp(), port = await freePort(BASE + 20, [])
   const pid = startApp({ cwd: dir, command: server, port, log: join(dir, 'app.log') })
   try {
     await waitForUrl(`http://127.0.0.1:${port}/`, 15000, pid)
@@ -71,7 +73,7 @@ test('copyInto copies by path, reports missing files, and refuses paths outside 
 })
 
 test('waitForUrl times out on a server that accepts but never answers', async () => {
-  const dir = tmp(), port = BASE + 40
+  const dir = tmp(), port = await freePort(BASE + 40, [])
   const hang = `"${process.execPath}" -e "require('net').createServer(()=>{}).listen(+process.argv[1])" {port}`
   const pid = startApp({ cwd: dir, command: hang, port, log: join(dir, 'app.log') })
   try {
@@ -86,7 +88,7 @@ test('waitForUrl times out on a server that accepts but never answers', async ()
 })
 
 test('stopApp kills a child that ignores SIGTERM after the shell has gone', async () => {
-  const dir = tmp(), port = BASE + 50
+  const dir = tmp(), port = await freePort(BASE + 50, [])
   const command = `trap "" TERM; ${server} & wait`
   const pid = startApp({ cwd: dir, command, port, log: join(dir, 'app.log') })
   try {
