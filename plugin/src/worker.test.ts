@@ -907,20 +907,9 @@ test('overview.get with a broken persona.studio says why, and logs it once', asy
   assert.equal(w.logs.filter((l) => /"port" must be a number/.test(l)).length, 1)
 })
 
-test('theme.get answers the terminal background Orca saved, and null without a settings store or a colour', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'home-')), was = process.env.HOME
-  cleanup.push(() => { process.env.HOME = was; rmSync(home, { recursive: true, force: true }) })
-  process.env.HOME = home
-  let answer = { code: 0, stdout: '#1c1c1c\n', stderr: '' }
-  const base = fakeRunner()
-  const { w } = await seeded([], { runner: async (cmd, args, opts) => (cmd.endsWith('sqlite3') ? answer : base(cmd, args, opts)) })
-  assert.deepEqual(await w.request('theme.get'), { canvas: null })
-  const store = join(home, 'Library', 'Application Support', 'orca', 'profiles', 'local-default')
-  mkdirSync(store, { recursive: true })
-  writeFileSync(join(store, 'profile-state.db'), '')
-  assert.deepEqual(await w.request('theme.get'), { canvas: '#1c1c1c' })
-  answer = { code: 0, stdout: '\n', stderr: '' }
-  assert.deepEqual(await w.request('theme.get'), { canvas: null })
-  answer = { code: 1, stdout: '#fff', stderr: 'no such table' }
-  assert.deepEqual(await w.request('theme.get'), { canvas: null })
+test('the worker never reads Orca\'s settings for a background: no theme.get, no sqlite3', async () => {
+  const ran: string[] = [], base = fakeRunner()
+  const { w } = await seeded([], { runner: async (cmd, args, opts) => (ran.push(cmd), base(cmd, args, opts)) })
+  await assert.rejects(w.request('theme.get'), (e: any) => e.code === 'unknown_method')
+  assert.ok(!ran.some((c) => c.endsWith('sqlite3')))
 })

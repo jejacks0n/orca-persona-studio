@@ -651,17 +651,6 @@ export default function activate(orca: OrcaWorkerApi): void {
     await refocus().catch((err) => orca.log(`studio: finding the focused project: ${say(err)}`))
   })
   handle('focus.get', () => focusNow())
-  /** The terminal background the owner set in Orca, so the tab sits on the colour their terminals do.
-   *  ponytail: reads Orca's private settings store with macOS's sqlite3; null (the tab keeps its chat-canvas mix) when either moves. */
-  handle('theme.get', async () => {
-    const db = join(homedir(), 'Library', 'Application Support', 'orca', 'profiles', 'local-default', 'profile-state.db')
-    if (!existsSync(db)) return { canvas: null }
-    const out = await runner('/usr/bin/sqlite3', ['-readonly', `file:${db}?mode=ro`,
-      "select json_extract(payload, '$.terminalColorOverrides.background') from profile_state_documents where domain = 'settings'"], { timeoutMs: 5000 })
-      .catch(() => null)
-    const v = out?.code === 0 ? out.stdout.trim() : ''
-    return { canvas: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v : null }
-  })
 
   orca.commands.register('open', async () => {
     try {

@@ -1,5 +1,5 @@
 import { assert, hostError, test } from 'orca/testing'
-import { actionOf, applyShow, failureOf, isDarkColor, fieldOf, findingRefused, focusOf, notesRefused, refetchesFinding, refusedOf, rootClass, saveOf, settle, showsPersona, withDetail, type Act } from './app-logic'
+import { actionOf, applyShow, failureOf, fieldOf, findingRefused, focusOf, notesRefused, refetchesFinding, refusedOf, rootClass, saveOf, settle, showsPersona, withDetail, type Act } from './app-logic'
 import { freshUi, type Ui } from './app-view'
 import type { Row } from './findings-view'
 import type { Detail, PersonaDetail } from './protocol'
@@ -370,8 +370,4 @@ test('Start work on several picked findings drafts them together, then sends tog
 test('clear-q empties the search', () => {
   const u = ui({ q: 'export' })
   assert.equal(uiOf(act({ do: 'clear-q' }, u), u).q, '')
-})
-
-test('isDarkColor tells a dark terminal background from a light one, in either hex length', () => {
-  assert.deepEqual(['#1c1c1c', '#151515', '#000', '#fff', '#fafafa', '#3b5bdb'].map(isDarkColor), [true, true, true, false, false, true])
 })

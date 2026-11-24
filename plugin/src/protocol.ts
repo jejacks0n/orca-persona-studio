@@ -66,7 +66,6 @@ export type Show = { state?: FindingState; persona?: string | null; finding?: st
 declare module 'orca' {
   interface PluginRequests {
     'focus.get': { output: Focus }
-    'theme.get': { output: { canvas: string | null } }
     'overview.get': { input: { project: string }; output: Overview }
     'findings.list': { input: { project: string }; output: { rows: Row[] } }
     'finding.get': { input: { project: string; id: string }; output: Detail }
